@@ -1,3 +1,4 @@
+```javascript
 import './style.css'
 
 // Mock Data for "Startup" feel until API is connected
@@ -29,8 +30,8 @@ const MOCK_EVENTS = [
 ];
 
 document.querySelector('#app').innerHTML = `
-  <!-- App content is in index.html, this is just a placeholder if we were doing SPA -->
-`
+    < !--App content is in index.html, this is just a placeholder if we were doing SPA-- >
+        `
 
 // Mobile Menu Toggle
 const menuBtn = document.querySelector('.mobile-menu-btn');
@@ -51,7 +52,7 @@ function formatDate(dateString) {
 
 function renderEvents(events) {
     eventsContainer.innerHTML = events.map(event => `
-        <article class="event-card fade-in">
+        < article class="event-card fade-in" >
             <div class="event-image" style="background-image: url('${event.image}')">
                 <div class="date-badge">
                     <span class="day">${new Date(event.date).getDate()}</span>
@@ -64,14 +65,14 @@ function renderEvents(events) {
                 <p class="time">⏰ ${new Date(event.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
                 <a href="${event.link}" class="btn-link">Join List →</a>
             </div>
-        </article>
+        </article >
     `).join('');
 }
 
 // Simulate API load
 setTimeout(() => {
-    renderEvents(MOCK_EVENTS);
-}, 800);
+    loadChapters();
+}, 500);
 
 // Simple Intersection Observer for scroll animations
 const observer = new IntersectionObserver((entries) => {
