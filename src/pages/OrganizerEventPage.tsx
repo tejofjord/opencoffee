@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import { PieTimer } from "../components/PieTimer";
 import { UrlCard } from "../components/UrlCard";
 import { useAuth } from "../context/AuthContext";
@@ -22,6 +22,7 @@ interface SessionMutationResponse {
 export function OrganizerEventPage() {
   const { user } = useAuth();
   const { eventId } = useParams<{ eventId: string }>();
+  const [search] = useSearchParams();
 
   const [eventTitle, setEventTitle] = useState<string>("");
   const [chapterId, setChapterId] = useState<string>("");
@@ -108,6 +109,7 @@ export function OrganizerEventPage() {
   }, [eventId]);
 
   const isOrganizer = role === "organizer" || role === "admin";
+  const isProjectorMode = search.get("view") === "projector";
 
   const activeItem = useMemo(
     () => queue.find((item) => item.id === session?.activeSignupId) || null,
@@ -121,6 +123,7 @@ export function OrganizerEventPage() {
 
   if (!eventId) return <section className="panel">Missing event ID.</section>;
   const resolvedEventId = eventId;
+  const projectorUrl = `/organizer/events/${resolvedEventId}?view=projector`;
 
   async function openSession() {
     setError(null);
@@ -230,6 +233,60 @@ export function OrganizerEventPage() {
     );
   }
 
+  if (isProjectorMode) {
+    return (
+      <div className="grid">
+        <section className="panel projector projector-stage">
+          <div className="projector-banner">
+            <h1>{eventTitle || "OpenCoffee Live Intros"}</h1>
+            <p className="small muted">
+              Chunk {session ? session.currentChunkStart + 1 : 1} to {session ? Math.min(session.currentChunkStart + session.chunkSize, queue.length) : queue.length} of {queue.length}
+            </p>
+          </div>
+
+          <div className="projector-stage-grid">
+            <div className="chunk-preview projector-chunk">
+              <h3>Current lineup</h3>
+              <ol>
+                {currentChunk.map((item) => (
+                  <li key={item.id} className={item.active ? "active-item" : ""}>
+                    {item.profileName}
+                  </li>
+                ))}
+              </ol>
+            </div>
+
+            <div className="active-panel projector-active">
+              {activeItem ? (
+                <>
+                  <h2>{activeItem.profileName}</h2>
+                  <p><strong>Who:</strong> {activeItem.who}</p>
+                  <p><strong>Project:</strong> {activeItem.project}</p>
+                  <p><strong>Need:</strong> {activeItem.need}</p>
+                  <p><strong>Can help:</strong> {activeItem.canHelp}</p>
+
+                  {session ? (
+                    <PieTimer
+                      durationSeconds={60}
+                      startedAt={session.timerStartedAt}
+                      elapsedSeconds={session.timerElapsedSeconds}
+                    />
+                  ) : null}
+
+                  <UrlCard websiteUrl={activeItem.websiteUrl} linkedinUrl={activeItem.linkedinUrl} />
+                </>
+              ) : (
+                <p className="muted">No active presenter yet.</p>
+              )}
+            </div>
+          </div>
+        </section>
+
+        {error ? <p className="error">{error}</p> : null}
+      </div>
+    );
+  }
+
   return (
     <div className="grid organizer-layout">
       <section className="panel">
@@ -249,6 +306,9 @@ export function OrganizerEventPage() {
           <button onClick={() => void shiftChunk("next")} disabled={!session}>
             Next chunk
           </button>
+          <a href={projectorUrl} target="_blank" rel="noreferrer" className="button-link ghost-link">
+            Open clean projector view
+          </a>
         </div>
 
         {session ? (
@@ -309,7 +369,9 @@ export function OrganizerEventPage() {
       </section>
 
       <section className="panel projector">
-        <h2>Projector View</h2>
+        <h2>Projector Preview</h2>
+        <p className="small muted">Open the clean projector view for full-screen display output.</p>
+
         <div className="chunk-preview">
           <h3>Current chunk</h3>
           <ol>
@@ -325,16 +387,7 @@ export function OrganizerEventPage() {
           <div className="active-panel">
             <h3>{activeItem.profileName}</h3>
             <p>
-              <strong>Who:</strong> {activeItem.who}
-            </p>
-            <p>
-              <strong>Project:</strong> {activeItem.project}
-            </p>
-            <p>
               <strong>Need:</strong> {activeItem.need}
-            </p>
-            <p>
-              <strong>Can help:</strong> {activeItem.canHelp}
             </p>
 
             {session ? (

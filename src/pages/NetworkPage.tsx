@@ -13,6 +13,7 @@ export function NetworkPage() {
   const [eventFilter, setEventFilter] = useState<string>("all");
   const [dateFrom, setDateFrom] = useState<string>("");
   const [dateTo, setDateTo] = useState<string>("");
+  const [searchTerm, setSearchTerm] = useState<string>("");
 
   const [nodes, setNodes] = useState<GraphNode[]>([]);
   const [edges, setEdges] = useState<GraphEdge[]>([]);
@@ -46,6 +47,36 @@ export function NetworkPage() {
     () => nodes.find((node) => node.id === selectedNodeId) || null,
     [nodes, selectedNodeId],
   );
+
+  const normalizedSearch = searchTerm.trim().toLowerCase();
+
+  const visibleNodes = useMemo(() => {
+    if (!normalizedSearch) return nodes;
+
+    return nodes.filter((node) => {
+      const blob = `${node.label} ${node.need} ${node.canHelp} ${node.bio ?? ""}`.toLowerCase();
+      return blob.includes(normalizedSearch);
+    });
+  }, [nodes, normalizedSearch]);
+
+  const visibleNodeIds = useMemo(() => new Set(visibleNodes.map((node) => node.id)), [visibleNodes]);
+
+  const visibleEdges = useMemo(
+    () =>
+      edges.filter((edge) => visibleNodeIds.has(edge.from) && visibleNodeIds.has(edge.to)),
+    [edges, visibleNodeIds],
+  );
+
+  useEffect(() => {
+    if (visibleNodes.length === 0) {
+      setSelectedNodeId(null);
+      return;
+    }
+
+    if (!selectedNodeId || !visibleNodeIds.has(selectedNodeId)) {
+      setSelectedNodeId(visibleNodes[0].id);
+    }
+  }, [selectedNodeId, visibleNodeIds, visibleNodes]);
 
   async function loadGraph() {
     setError(null);
@@ -117,10 +148,11 @@ export function NetworkPage() {
           type: request.request_type,
         }));
 
-      setNodes(Array.from(latestByUser.values()));
+      const nextNodes = Array.from(latestByUser.values());
+      setNodes(nextNodes);
       setEdges(nextEdges);
-      if (!selectedNodeId && latestByUser.size > 0) {
-        setSelectedNodeId(Array.from(latestByUser.keys())[0]);
+      if (nextNodes.length > 0 && !selectedNodeId) {
+        setSelectedNodeId(nextNodes[0].id);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load graph");
@@ -190,7 +222,7 @@ export function NetworkPage() {
         <h1>Chapter Network</h1>
         <p className="muted">Graph of presenters with accepted help connections.</p>
 
-        <div className="filters">
+        <div className="filters filters-network">
           <label>
             Event
             <select value={eventFilter} onChange={(e) => setEventFilter(e.target.value)}>
@@ -210,15 +242,49 @@ export function NetworkPage() {
             To
             <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
           </label>
+          <label>
+            Search people or needs
+            <input
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="name, need, help, bio"
+            />
+          </label>
           <button onClick={() => void loadGraph()}>Refresh</button>
         </div>
 
-        <GraphCanvas
-          nodes={nodes}
-          edges={edges}
-          selectedNodeId={selectedNodeId}
-          onSelectNode={(nodeId) => setSelectedNodeId(nodeId)}
-        />
+        <div className="graph-meta row wrap">
+          <span className="small muted">Showing {visibleNodes.length} of {nodes.length} presenters</span>
+          <span className="legend-item"><span className="legend-line amber" /> Need help edge</span>
+          <span className="legend-item"><span className="legend-line green" /> Can help edge</span>
+          <span className="legend-item"><span className="legend-dot" /> Node color = primary need cluster</span>
+        </div>
+
+        {visibleNodes.length === 0 ? (
+          <p className="muted">No presenters match your current filters.</p>
+        ) : (
+          <>
+            <GraphCanvas
+              nodes={visibleNodes}
+              edges={visibleEdges}
+              selectedNodeId={selectedNodeId}
+              highlightedNodeIds={normalizedSearch ? visibleNodes.map((node) => node.id) : []}
+              onSelectNode={(nodeId) => setSelectedNodeId(nodeId)}
+            />
+
+            <div className="node-quicklist">
+              {visibleNodes.slice(0, 18).map((node) => (
+                <button
+                  key={node.id}
+                  className={selectedNodeId === node.id ? "ghost active-pill" : "ghost"}
+                  onClick={() => setSelectedNodeId(node.id)}
+                >
+                  {node.label}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
       </section>
 
       <section className="panel">

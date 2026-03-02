@@ -13,6 +13,15 @@ interface SignupUpsertResponse {
   queuePosition: number;
 }
 
+const stepLabels = [
+  "Who are you?",
+  "What is your project?",
+  "What do you need?",
+  "How can you help?",
+  "Links and bio",
+  "Review and submit",
+] as const;
+
 export function EventJoinPage() {
   const { eventId } = useParams<{ eventId: string }>();
   const [search] = useSearchParams();
@@ -21,6 +30,7 @@ export function EventJoinPage() {
   const [sessionToken, setSessionToken] = useState(tokenFromUrl);
   const [sessionPin, setSessionPin] = useState("");
   const [verified, setVerified] = useState(false);
+  const [currentStep, setCurrentStep] = useState(0);
 
   const [form, setForm] = useState<Omit<SignupSubmission, "eventId">>({
     who: "",
@@ -47,6 +57,43 @@ export function EventJoinPage() {
   }
   const resolvedEventId = eventId;
 
+  const totalSteps = stepLabels.length;
+  const progressPct = ((currentStep + 1) / totalSteps) * 100;
+
+  function updateField<K extends keyof Omit<SignupSubmission, "eventId">>(
+    key: K,
+    value: Omit<SignupSubmission, "eventId">[K],
+  ) {
+    setForm((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function nextStep() {
+    if (currentStep === 0 && !form.who.trim()) {
+      setError("Please complete this step before continuing.");
+      return;
+    }
+    if (currentStep === 1 && !form.project.trim()) {
+      setError("Please complete this step before continuing.");
+      return;
+    }
+    if (currentStep === 2 && !form.need.trim()) {
+      setError("Please complete this step before continuing.");
+      return;
+    }
+    if (currentStep === 3 && !form.canHelp.trim()) {
+      setError("Please complete this step before continuing.");
+      return;
+    }
+
+    setError(null);
+    setCurrentStep((prev) => Math.min(totalSteps - 1, prev + 1));
+  }
+
+  function prevStep() {
+    setError(null);
+    setCurrentStep((prev) => Math.max(0, prev - 1));
+  }
+
   async function verifyAccess(event: FormEvent) {
     event.preventDefault();
     setError(null);
@@ -68,7 +115,8 @@ export function EventJoinPage() {
       }
 
       setVerified(true);
-      setStatus("Access granted. Submit your intro.");
+      setCurrentStep(0);
+      setStatus("Access granted. Step through the intro flow.");
       setForm((prev) => ({ ...prev, sessionToken, sessionPin }));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Session validation failed");
@@ -77,6 +125,12 @@ export function EventJoinPage() {
 
   async function submitSignup(event: FormEvent) {
     event.preventDefault();
+
+    if (!canSubmit) {
+      setError("Please complete all 4 required intro prompts before submitting.");
+      return;
+    }
+
     setError(null);
     setStatus("Saving signup...");
 
@@ -102,7 +156,7 @@ export function EventJoinPage() {
   }
 
   return (
-    <div className="grid two-col">
+    <div className="grid join-layout">
       <section className="panel">
         <h1>Event Check-In</h1>
         <p className="muted">Use organizer QR token or PIN while signup window is open.</p>
@@ -126,79 +180,152 @@ export function EventJoinPage() {
           </label>
           <button type="submit">Verify access</button>
         </form>
+
+        <div className="card small-card">
+          <strong>Flow:</strong>
+          <p className="small muted">1. Verify session</p>
+          <p className="small muted">2. Answer the 4 intro prompts</p>
+          <p className="small muted">3. Optional links and bio</p>
+          <p className="small muted">4. Review and submit queue entry</p>
+        </div>
       </section>
 
       <section className="panel">
-        <h2>Intro Submission (4 required)</h2>
-        {!verified ? <p className="muted">Verify access to unlock form.</p> : null}
+        <h2>Presenter Intro</h2>
+        {!verified ? <p className="muted">Verify access to unlock the guided form.</p> : null}
 
-        <form className="stack" onSubmit={submitSignup}>
-          <label>
-            Who are you?
-            <textarea
-              required
-              disabled={!verified}
-              value={form.who}
-              onChange={(e) => setForm((prev) => ({ ...prev, who: e.target.value }))}
-            />
-          </label>
-          <label>
-            What is your project?
-            <textarea
-              required
-              disabled={!verified}
-              value={form.project}
-              onChange={(e) => setForm((prev) => ({ ...prev, project: e.target.value }))}
-            />
-          </label>
-          <label>
-            What do you need or want?
-            <textarea
-              required
-              disabled={!verified}
-              value={form.need}
-              onChange={(e) => setForm((prev) => ({ ...prev, need: e.target.value }))}
-            />
-          </label>
-          <label>
-            How can you help others?
-            <textarea
-              required
-              disabled={!verified}
-              value={form.canHelp}
-              onChange={(e) => setForm((prev) => ({ ...prev, canHelp: e.target.value }))}
-            />
-          </label>
-          <label>
-            Website URL (optional)
-            <input
-              type="url"
-              disabled={!verified}
-              value={form.websiteUrl}
-              onChange={(e) => setForm((prev) => ({ ...prev, websiteUrl: e.target.value }))}
-            />
-          </label>
-          <label>
-            LinkedIn URL (optional)
-            <input
-              type="url"
-              disabled={!verified}
-              value={form.linkedinUrl}
-              onChange={(e) => setForm((prev) => ({ ...prev, linkedinUrl: e.target.value }))}
-            />
-          </label>
-          <label>
-            Short bio (optional)
-            <textarea
-              disabled={!verified}
-              value={form.shortBio}
-              onChange={(e) => setForm((prev) => ({ ...prev, shortBio: e.target.value }))}
-            />
-          </label>
-          <button type="submit" disabled={!verified || !canSubmit}>
-            Submit intro
-          </button>
-        </form>
+        {verified ? (
+          <form className="stack" onSubmit={submitSignup}>
+            <div className="stepper-head">
+              <div className="row wrap step-meta-row">
+                <span className="small muted">Step {currentStep + 1} of {totalSteps}</span>
+                <span className="small muted">{stepLabels[currentStep]}</span>
+              </div>
+              <div className="step-progress">
+                <span style={{ width: `${progressPct}%` }} />
+              </div>
+            </div>
+
+            {currentStep === 0 ? (
+              <label>
+                Who are you?
+                <textarea
+                  required
+                  value={form.who}
+                  onChange={(e) => updateField("who", e.target.value)}
+                  placeholder="Name, background, and your role"
+                />
+              </label>
+            ) : null}
+
+            {currentStep === 1 ? (
+              <label>
+                What is your project?
+                <textarea
+                  required
+                  value={form.project}
+                  onChange={(e) => updateField("project", e.target.value)}
+                  placeholder="What are you building right now?"
+                />
+              </label>
+            ) : null}
+
+            {currentStep === 2 ? (
+              <label>
+                What do you need or want?
+                <textarea
+                  required
+                  value={form.need}
+                  onChange={(e) => updateField("need", e.target.value)}
+                  placeholder="Advice, intro, cofounder, customers, funding..."
+                />
+              </label>
+            ) : null}
+
+            {currentStep === 3 ? (
+              <label>
+                How can you help others?
+                <textarea
+                  required
+                  value={form.canHelp}
+                  onChange={(e) => updateField("canHelp", e.target.value)}
+                  placeholder="Skills, connections, hiring, technical support..."
+                />
+              </label>
+            ) : null}
+
+            {currentStep === 4 ? (
+              <>
+                <label>
+                  Website URL (optional)
+                  <input
+                    type="url"
+                    value={form.websiteUrl}
+                    onChange={(e) => updateField("websiteUrl", e.target.value)}
+                  />
+                </label>
+                <label>
+                  LinkedIn URL (optional)
+                  <input
+                    type="url"
+                    value={form.linkedinUrl}
+                    onChange={(e) => updateField("linkedinUrl", e.target.value)}
+                  />
+                </label>
+                <label>
+                  Short bio (optional)
+                  <textarea
+                    value={form.shortBio}
+                    onChange={(e) => updateField("shortBio", e.target.value)}
+                  />
+                </label>
+                {!form.websiteUrl && !form.linkedinUrl ? (
+                  <p className="small muted">Tip: adding one link helps people find you faster after the event.</p>
+                ) : null}
+              </>
+            ) : null}
+
+            {currentStep === 5 ? (
+              <div className="review-grid">
+                <article className="card">
+                  <h3>Who</h3>
+                  <p className="small">{form.who || "-"}</p>
+                </article>
+                <article className="card">
+                  <h3>Project</h3>
+                  <p className="small">{form.project || "-"}</p>
+                </article>
+                <article className="card">
+                  <h3>Need</h3>
+                  <p className="small">{form.need || "-"}</p>
+                </article>
+                <article className="card">
+                  <h3>Can Help</h3>
+                  <p className="small">{form.canHelp || "-"}</p>
+                </article>
+                <article className="card">
+                  <h3>Website</h3>
+                  <p className="small break">{form.websiteUrl || "-"}</p>
+                </article>
+                <article className="card">
+                  <h3>LinkedIn</h3>
+                  <p className="small break">{form.linkedinUrl || "-"}</p>
+                </article>
+              </div>
+            ) : null}
+
+            <div className="row wrap step-actions">
+              <button type="button" className="ghost" onClick={prevStep} disabled={currentStep === 0}>
+                Back
+              </button>
+              {currentStep < totalSteps - 1 ? (
+                <button type="button" onClick={nextStep}>Continue</button>
+              ) : (
+                <button type="submit" disabled={!canSubmit}>Submit intro</button>
+              )}
+            </div>
+          </form>
+        ) : null}
       </section>
 
       {status ? <p className="success full">{status}</p> : null}

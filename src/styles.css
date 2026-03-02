@@ -80,6 +80,12 @@ button.ghost {
   border: 1px solid var(--line);
 }
 
+.button-link.ghost-link {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--line);
+}
+
 button.danger {
   background: linear-gradient(120deg, var(--danger), #fda4af);
   color: #1f2937;
@@ -154,6 +160,10 @@ button.danger {
   background: rgba(10, 16, 32, 0.4);
 }
 
+.small-card {
+  margin-top: 0.9rem;
+}
+
 .grid {
   display: grid;
   gap: 1rem;
@@ -161,6 +171,10 @@ button.danger {
 
 .two-col {
   grid-template-columns: 1fr 1fr;
+}
+
+.join-layout {
+  grid-template-columns: 0.9fr 1.1fr;
 }
 
 .organizer-layout {
@@ -271,6 +285,55 @@ h3 {
   min-height: 780px;
 }
 
+.projector-stage {
+  min-height: calc(100vh - 140px);
+}
+
+.projector-banner {
+  display: grid;
+  gap: 0.35rem;
+  margin-bottom: 1.15rem;
+}
+
+.projector-banner h1 {
+  font-size: clamp(1.5rem, 3.2vw, 2.5rem);
+}
+
+.projector-stage-grid {
+  display: grid;
+  grid-template-columns: 0.45fr 1fr;
+  gap: 1rem;
+  min-height: 70vh;
+}
+
+.projector-chunk {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 0.9rem;
+  background: rgba(10, 16, 32, 0.58);
+}
+
+.projector-chunk li {
+  font-size: 1.08rem;
+  margin-bottom: 0.45rem;
+}
+
+.projector-active {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 1rem;
+  background: rgba(10, 16, 32, 0.58);
+}
+
+.projector-active h2 {
+  font-size: clamp(1.5rem, 3.8vw, 2.6rem);
+}
+
+.projector-active p {
+  font-size: clamp(1rem, 1.7vw, 1.25rem);
+  line-height: 1.4;
+}
+
 .chunk-preview ol {
   margin: 0;
   padding-left: 1.2rem;
@@ -285,6 +348,41 @@ h3 {
   display: grid;
   gap: 0.55rem;
   margin-top: 1rem;
+}
+
+.stepper-head {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.step-meta-row {
+  justify-content: space-between;
+}
+
+.step-progress {
+  width: 100%;
+  height: 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  overflow: hidden;
+  background: rgba(10, 16, 32, 0.45);
+}
+
+.step-progress span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(120deg, var(--accent), var(--accent-2));
+  transition: width 180ms ease-out;
+}
+
+.step-actions {
+  justify-content: space-between;
+}
+
+.review-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.7rem;
 }
 
 .url-card {
@@ -341,11 +439,67 @@ h3 {
   margin-bottom: 1rem;
 }
 
+.filters-network {
+  grid-template-columns: repeat(5, minmax(120px, 1fr));
+}
+
 .graph-canvas {
   width: 100%;
   height: auto;
   border-radius: 16px;
   border: 1px solid var(--line);
+}
+
+.graph-meta {
+  margin-bottom: 0.75rem;
+}
+
+.legend-item {
+  font-size: 0.85rem;
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.legend-line {
+  width: 20px;
+  height: 3px;
+  border-radius: 999px;
+  display: inline-block;
+}
+
+.legend-line.amber {
+  background: #f59e0b;
+}
+
+.legend-line.green {
+  background: #34d399;
+}
+
+.legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+  background: #64748b;
+}
+
+.node-quicklist {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 0.7rem;
+}
+
+.node-quicklist button {
+  padding: 0.35rem 0.6rem;
+  font-size: 0.82rem;
+}
+
+.active-pill {
+  border-color: rgba(255, 159, 28, 0.8) !important;
+  background: rgba(255, 159, 28, 0.14) !important;
 }
 
 .conversation-list {
@@ -400,6 +554,7 @@ h3 {
 }
 
 @media (max-width: 1080px) {
+  .join-layout,
   .two-col,
   .organizer-layout,
   .network-layout,
@@ -421,5 +576,17 @@ h3 {
 
   .conversation-list {
     width: 100%;
+  }
+
+  .projector-stage-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .review-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .filters-network {
+    grid-template-columns: 1fr 1fr;
   }
 }
