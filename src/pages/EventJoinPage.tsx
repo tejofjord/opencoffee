@@ -1,4 +1,4 @@
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { invokeFunction } from "../lib/functions";
 import type { SignupSubmission } from "../types/domain";
@@ -46,6 +46,7 @@ export function EventJoinPage() {
 
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const autoVerifyAttemptedRef = useRef(false);
 
   const canSubmit = useMemo(
     () => Boolean(form.who && form.project && form.need && form.canHelp),
@@ -94,9 +95,9 @@ export function EventJoinPage() {
     setCurrentStep((prev) => Math.max(0, prev - 1));
   }
 
-  async function verifyAccess(event: FormEvent) {
-    event.preventDefault();
+  async function verifyAccessRequest(token: string, pin: string, auto = false) {
     setError(null);
+    setStatus(auto ? "Verifying QR check-in link..." : "Verifying access...");
 
     try {
       const response = await invokeFunction<
@@ -104,24 +105,38 @@ export function EventJoinPage() {
         SessionJoinResponse
       >("session-join", {
         eventId: resolvedEventId,
-        token: sessionToken || undefined,
-        pin: sessionPin || undefined,
+        token: token || undefined,
+        pin: pin || undefined,
       });
 
       if (!response.allowed) {
         setError(response.message);
         setVerified(false);
+        setStatus(null);
         return;
       }
 
       setVerified(true);
       setCurrentStep(0);
       setStatus("Access granted. Step through the intro flow.");
-      setForm((prev) => ({ ...prev, sessionToken, sessionPin }));
+      setForm((prev) => ({ ...prev, sessionToken: token, sessionPin: pin }));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Session validation failed");
+      setStatus(null);
     }
   }
+
+  async function verifyAccess(event: FormEvent) {
+    event.preventDefault();
+    await verifyAccessRequest(sessionToken, sessionPin);
+  }
+
+  useEffect(() => {
+    if (!tokenFromUrl || verified || autoVerifyAttemptedRef.current) return;
+    autoVerifyAttemptedRef.current = true;
+    void verifyAccessRequest(tokenFromUrl, sessionPin, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tokenFromUrl, verified]);
 
   async function submitSignup(event: FormEvent) {
     event.preventDefault();
@@ -160,6 +175,9 @@ export function EventJoinPage() {
       <section className="panel">
         <h1>Event Check-In</h1>
         <p className="muted">Use organizer QR token or PIN while signup window is open.</p>
+        {tokenFromUrl ? (
+          <p className="small muted">QR link detected. Access will be verified automatically.</p>
+        ) : null}
 
         <form className="stack" onSubmit={verifyAccess}>
           <label>

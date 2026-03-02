@@ -5,6 +5,7 @@ import { UrlCard } from "../components/UrlCard";
 import { useAuth } from "../context/AuthContext";
 import { getQueueForEvent, getSessionForEvent } from "../lib/data";
 import { invokeFunction } from "../lib/functions";
+import { buildQrCodeUrl } from "../lib/qr";
 import { supabase } from "../lib/supabase";
 import { formatDateTime } from "../lib/time";
 import type { EventSession, QueueItem, Role } from "../types/domain";
@@ -33,6 +34,11 @@ export function OrganizerEventPage() {
   const [pin, setPin] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
+
+  const shareStateKey = useMemo(
+    () => (eventId ? `opencoffee:session-share:${eventId}` : ""),
+    [eventId],
+  );
 
   async function loadAll() {
     if (!eventId || !user) return;
@@ -82,6 +88,38 @@ export function OrganizerEventPage() {
   }, [eventId, user?.id]);
 
   useEffect(() => {
+    if (!shareStateKey) return;
+
+    const raw = window.localStorage.getItem(shareStateKey);
+    if (!raw) return;
+
+    try {
+      const parsed = JSON.parse(raw) as { joinUrl?: string; pin?: string };
+      if (parsed.joinUrl) setJoinUrl(parsed.joinUrl);
+      if (parsed.pin) setPin(parsed.pin);
+    } catch {
+      // Ignore malformed local share state.
+    }
+  }, [shareStateKey]);
+
+  useEffect(() => {
+    if (!shareStateKey) return;
+
+    if (!joinUrl && !pin) {
+      window.localStorage.removeItem(shareStateKey);
+      return;
+    }
+
+    window.localStorage.setItem(
+      shareStateKey,
+      JSON.stringify({
+        joinUrl,
+        pin,
+      }),
+    );
+  }, [joinUrl, pin, shareStateKey]);
+
+  useEffect(() => {
     if (!eventId) return;
 
     const channel = supabase
@@ -123,7 +161,7 @@ export function OrganizerEventPage() {
 
   if (!eventId) return <section className="panel">Missing event ID.</section>;
   const resolvedEventId = eventId;
-  const projectorUrl = `/organizer/events/${resolvedEventId}?view=projector`;
+  const projectorUrl = `/app/organizer/events/${resolvedEventId}?view=projector`;
 
   async function openSession() {
     setError(null);
@@ -148,9 +186,22 @@ export function OrganizerEventPage() {
         eventId: resolvedEventId,
       });
       setSession(response.session);
+      setJoinUrl("");
+      setPin("");
       setStatus("Session closed.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to close session");
+    }
+  }
+
+  async function copyJoinLink() {
+    if (!joinUrl) return;
+
+    try {
+      await navigator.clipboard.writeText(joinUrl);
+      setStatus("Join URL copied.");
+    } catch {
+      setError("Could not copy join URL.");
     }
   }
 
@@ -325,12 +376,30 @@ export function OrganizerEventPage() {
         {(joinUrl || pin) && (
           <div className="card">
             <h3>Share with attendees</h3>
-            {joinUrl ? (
-              <p className="small break">
-                Join URL: <a href={joinUrl}>{joinUrl}</a>
-              </p>
-            ) : null}
-            {pin ? <p className="small">PIN: {pin}</p> : null}
+            <div className="join-share-grid">
+              <div className="stack gap-sm">
+                {joinUrl ? (
+                  <>
+                    <p className="small break">
+                      Join URL:{" "}
+                      <a href={joinUrl} target="_blank" rel="noreferrer">
+                        {joinUrl}
+                      </a>
+                    </p>
+                    <div className="row wrap">
+                      <button type="button" className="ghost" onClick={() => void copyJoinLink()}>
+                        Copy join URL
+                      </button>
+                    </div>
+                  </>
+                ) : null}
+                {pin ? <p className="small">PIN: {pin}</p> : null}
+              </div>
+
+              {joinUrl ? (
+                <img className="qr" src={buildQrCodeUrl(joinUrl, 220)} alt="Event join QR code" />
+              ) : null}
+            </div>
           </div>
         )}
 

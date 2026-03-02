@@ -61,10 +61,12 @@ Deno.serve(async (req) => {
 
     if (error || !data) throw new Error(error?.message || "Failed to open session");
 
-    const baseUrl = Deno.env.get("APP_BASE_URL") || req.headers.get("origin") || "http://localhost:5173";
+    const baseUrl = (
+      Deno.env.get("APP_BASE_URL") || req.headers.get("origin") || "http://localhost:5173"
+    ).replace(/\/+$/, "");
 
     return jsonResponse({
-      joinUrl: `${baseUrl}/events/${body.eventId}/join?token=${token}`,
+      joinUrl: `${baseUrl}/app/events/${body.eventId}/join?token=${token}`,
       pin,
       session: {
         id: data.id,

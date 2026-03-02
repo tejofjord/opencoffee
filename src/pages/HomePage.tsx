@@ -75,7 +75,7 @@ export function HomePage() {
         <p>
           Structured intros, live queue management, and post-event network graph for chapter members.
         </p>
-        <Link to="/auth" className="button-link">
+        <Link to="/auth?redirect=/app" className="button-link">
           Sign in with magic link
         </Link>
       </section>
@@ -95,9 +95,9 @@ export function HomePage() {
               <p className="small muted">{formatDateTime(event.startsAt)}</p>
               <p className="small muted">{event.venue || "Venue TBA"}</p>
               <div className="row">
-                <Link to={`/events/${event.id}/join`}>Join flow</Link>
+                <Link to={`/app/events/${event.id}/join`}>Join flow</Link>
                 {(role === "organizer" || role === "admin") && (
-                  <Link to={`/organizer/events/${event.id}`}>Organizer console</Link>
+                  <Link to={`/app/organizer/events/${event.id}`}>Organizer console</Link>
                 )}
               </div>
             </article>

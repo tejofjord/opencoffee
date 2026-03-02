@@ -1,11 +1,8 @@
+import { buildQrCodeUrl } from "../lib/qr";
+
 interface UrlCardProps {
   websiteUrl?: string | null;
   linkedinUrl?: string | null;
-}
-
-function makeQrcodeUrl(value: string): string {
-  const encoded = encodeURIComponent(value);
-  return `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encoded}`;
 }
 
 export function UrlCard({ websiteUrl, linkedinUrl }: UrlCardProps) {
@@ -29,7 +26,7 @@ export function UrlCard({ websiteUrl, linkedinUrl }: UrlCardProps) {
         {hostname}
       </a>
       <div className="small muted break">{targetUrl}</div>
-      <img className="qr" src={makeQrcodeUrl(targetUrl)} alt="Profile QR code" />
+      <img className="qr" src={buildQrCodeUrl(targetUrl)} alt="Profile QR code" />
     </div>
   );
 }

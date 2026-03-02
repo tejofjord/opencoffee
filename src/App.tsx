@@ -5,6 +5,7 @@ import { AuthPage } from "./pages/AuthPage";
 import { EventJoinPage } from "./pages/EventJoinPage";
 import { HomePage } from "./pages/HomePage";
 import { InboxPage } from "./pages/InboxPage";
+import { LandingPage } from "./pages/LandingPage";
 import { ModerationPage } from "./pages/ModerationPage";
 import { NetworkPage } from "./pages/NetworkPage";
 import { OrganizerEventPage } from "./pages/OrganizerEventPage";
@@ -12,8 +13,9 @@ import { OrganizerEventPage } from "./pages/OrganizerEventPage";
 export function App() {
   return (
     <Routes>
+      <Route path="/" element={<LandingPage />} />
       <Route path="/auth" element={<AuthPage />} />
-      <Route path="/" element={<Layout />}>
+      <Route path="/app" element={<Layout />}>
         <Route index element={<HomePage />} />
         <Route
           path="events/:eventId/join"

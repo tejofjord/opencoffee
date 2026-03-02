@@ -31,12 +31,14 @@ React + TypeScript frontend with Supabase backend for event intros, live organiz
 
 ## Implemented routes
 
+- `/`
 - `/auth`
-- `/events/:eventId/join`
-- `/organizer/events/:eventId`
-- `/network`
-- `/inbox`
-- `/moderation`
+- `/app`
+- `/app/events/:eventId/join`
+- `/app/organizer/events/:eventId`
+- `/app/network`
+- `/app/inbox`
+- `/app/moderation`
 
 ## Implemented edge functions
 
@@ -53,3 +55,7 @@ React + TypeScript frontend with Supabase backend for event intros, live organiz
 - `report-create`
 - `report-resolve`
 - `notification-digest` (scheduled digest dispatcher)
+
+## TODO
+
+- Integrate Resend for real outbound digest emails using `opencoff.ee` sender domain.
