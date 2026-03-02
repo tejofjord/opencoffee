@@ -5,14 +5,25 @@ export interface PositionedGraph {
   edges: GraphEdge[];
 }
 
+const WIDTH = 920;
+const HEIGHT = 520;
+
 export function positionNodes(nodes: GraphNode[], edges: GraphEdge[]): PositionedGraph {
+  const centerX = WIDTH / 2;
+  const centerY = HEIGHT / 2;
+  const maxRingRadius = Math.min(centerX, centerY) - 34;
+  const rings = Math.max(1, Math.ceil(Math.sqrt(nodes.length) / 2));
+
   const placed = nodes.map((node, index) => {
-    const angle = (index / Math.max(1, nodes.length)) * Math.PI * 2;
-    const radius = 180 + (index % 7) * 14;
+    const t = index / Math.max(1, nodes.length);
+    const angle = t * Math.PI * 2 * 8.5;
+    const ring = index % rings;
+    const ringSpacing = maxRingRadius / Math.max(1, rings);
+    const radius = 22 + ringSpacing * ring + ((index % 11) - 5) * 1.5;
     return {
       ...node,
-      x: 240 + Math.cos(angle) * radius,
-      y: 220 + Math.sin(angle) * radius,
+      x: centerX + Math.cos(angle) * radius,
+      y: centerY + Math.sin(angle) * radius,
     };
   });
 

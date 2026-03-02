@@ -279,6 +279,16 @@ h3 {
   vertical-align: top;
 }
 
+.drag-handle {
+  min-width: 2rem;
+  padding: 0.2rem 0.35rem;
+  cursor: grab;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
 .active-row {
   background: rgba(46, 196, 182, 0.12);
 }
@@ -457,6 +467,12 @@ h3 {
   height: auto;
   border-radius: 16px;
   border: 1px solid var(--line);
+  display: block;
+}
+
+.graph-canvas-wrap {
+  border-radius: 16px;
+  overflow: hidden;
 }
 
 .graph-meta {

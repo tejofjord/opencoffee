@@ -2,6 +2,10 @@
 
 React + TypeScript frontend with Supabase backend for event intros, live organizer queue, and post-event networking.
 
+## Documentation
+
+- Full project documentation is in `docs/README.md`.
+
 ## Stack
 
 - Frontend: Vite, React, TypeScript, Supabase JS, React Router
@@ -16,11 +20,15 @@ React + TypeScript frontend with Supabase backend for event intros, live organiz
    - Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`
 3. Run frontend:
    - `npm run dev`
+4. Run tests:
+   - `npm run test:unit`
+   - `npm run test:integration`
+   - `npm run test:e2e`
 
 ## Supabase setup
 
 1. Create a Supabase project.
-2. Apply SQL migration in `supabase/migrations/20260228160000_initial_schema.sql`.
+2. Apply SQL migrations in `supabase/migrations/*.sql` in order.
 3. Run `supabase/seed.sql` to create Oslo chapter bootstrap data.
 4. Deploy edge functions from `supabase/functions/*`.
 5. Set edge function env vars:
@@ -28,6 +36,9 @@ React + TypeScript frontend with Supabase backend for event intros, live organiz
    - `SUPABASE_ANON_KEY`
    - `SUPABASE_SERVICE_ROLE_KEY`
    - optional: `APP_BASE_URL`
+   - `RESEND_API_KEY` (for digest emails)
+   - optional: `RESEND_FROM` (default `OpenCoffee <noreply@opencoff.ee>`)
+   - optional: `DIGEST_CRON_TOKEN`
 
 ## Implemented routes
 
@@ -54,8 +65,11 @@ React + TypeScript frontend with Supabase backend for event intros, live organiz
 - `message-send`
 - `report-create`
 - `report-resolve`
+- `event-upsert`
+- `event-delete`
+- `public-events`
 - `notification-digest` (scheduled digest dispatcher)
 
 ## TODO
 
-- Integrate Resend for real outbound digest emails using `opencoff.ee` sender domain.
+- Configure Resend domain verification (DNS) for `opencoff.ee` and enable production digest scheduler.

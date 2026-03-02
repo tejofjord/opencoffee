@@ -8,12 +8,79 @@ interface DigestItem {
   payload: Record<string, unknown>;
 }
 
+interface DeliveryResult {
+  ok: boolean;
+  error?: string;
+}
+
 function isAuthorized(req: Request): boolean {
   const expected = Deno.env.get("DIGEST_CRON_TOKEN");
   if (!expected) return true;
   const auth = req.headers.get("Authorization") || "";
   const token = auth.replace("Bearer ", "").trim();
   return token === expected;
+}
+
+function buildDigestSubject(kind: string, count: number): string {
+  switch (kind) {
+    case "message_digest":
+      return `OpenCoffee: ${count} new message${count === 1 ? "" : "s"}`;
+    default:
+      return `OpenCoffee: ${count} new notification${count === 1 ? "" : "s"}`;
+  }
+}
+
+function buildDigestHtml(kind: string, count: number, appBaseUrl: string): string {
+  const inboxUrl = `${appBaseUrl.replace(/\/+$/, "")}/app/inbox`;
+  return `
+    <div style="font-family: Arial, sans-serif; color: #111827;">
+      <h2 style="margin: 0 0 12px;">OpenCoffee Digest</h2>
+      <p style="margin: 0 0 10px;">
+        You have <strong>${count}</strong> pending update${count === 1 ? "" : "s"} in your OpenCoffee account.
+      </p>
+      <p style="margin: 0 0 18px;">Type: <strong>${kind}</strong></p>
+      <a href="${inboxUrl}" style="display:inline-block;background:#0f766e;color:white;padding:10px 14px;border-radius:8px;text-decoration:none;">
+        Open Inbox
+      </a>
+    </div>
+  `;
+}
+
+async function sendDigestEmail(
+  to: string,
+  subject: string,
+  html: string,
+): Promise<DeliveryResult> {
+  const apiKey = Deno.env.get("RESEND_API_KEY");
+  if (!apiKey) {
+    return { ok: false, error: "RESEND_API_KEY is not configured" };
+  }
+
+  const from = Deno.env.get("RESEND_FROM") || "OpenCoffee <noreply@opencoff.ee>";
+
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from,
+      to: [to],
+      subject,
+      html,
+    }),
+  });
+
+  if (response.ok) {
+    return { ok: true };
+  }
+
+  const body = await response.text();
+  return {
+    ok: false,
+    error: `Resend API error (${response.status}): ${body.slice(0, 500)}`,
+  };
 }
 
 Deno.serve(async (req) => {
@@ -52,44 +119,81 @@ Deno.serve(async (req) => {
     }
 
     let sentCount = 0;
+    let failedCount = 0;
 
     for (const [key, items] of grouped.entries()) {
       const [userId, kind] = key.split(":");
       const ids = items.map((item) => item.id);
 
-      // Placeholder mail dispatch hook.
-      // Integrate provider-specific delivery here (Resend, Postmark, SES, etc.).
-      const delivered = true;
+      const { data: userData, error: userError } = await admin.auth.admin.getUserById(userId);
+      const toEmail = userData.user?.email;
 
-      const nextStatus = delivered ? "sent" : "failed";
+      let delivery: DeliveryResult;
+
+      if (userError || !toEmail) {
+        delivery = {
+          ok: false,
+          error: userError?.message || "Target user email is missing",
+        };
+      } else {
+        const appBaseUrl = Deno.env.get("APP_BASE_URL") || req.headers.get("origin") || "http://localhost:5173";
+        delivery = await sendDigestEmail(
+          toEmail,
+          buildDigestSubject(kind, ids.length),
+          buildDigestHtml(kind, ids.length, appBaseUrl),
+        );
+      }
+
+      const nextStatus = delivery.ok ? "sent" : "failed";
+      const errorPayload = delivery.ok
+        ? null
+        : {
+            message: delivery.error || "Unknown delivery error",
+            failedAt: new Date().toISOString(),
+          };
+
       const { error: updateError } = await admin
         .from("notification_jobs")
-        .update({ status: nextStatus, updated_at: new Date().toISOString() })
+        .update({
+          status: nextStatus,
+          error: errorPayload,
+          updated_at: new Date().toISOString(),
+        })
         .in("id", ids);
 
       if (updateError) throw new Error(updateError.message);
 
-      await admin.from("audit_logs").insert({
-        chapter_id: (items[0].payload?.chapterId as string | undefined) ?? (await resolveChapterId(admin, userId)),
-        actor_id: null,
-        action: "notification_digest_dispatch",
-        entity_type: "notification_jobs",
-        entity_id: null,
-        payload: {
-          userId,
-          kind,
-          count: ids.length,
-          status: nextStatus,
-        },
-      });
+      const chapterId =
+        (items[0].payload?.chapterId as string | undefined) ?? (await resolveChapterId(admin, userId));
+      if (chapterId) {
+        await admin.from("audit_logs").insert({
+          chapter_id: chapterId,
+          actor_id: null,
+          action: "notification_digest_dispatch",
+          entity_type: "notification_jobs",
+          entity_id: null,
+          payload: {
+            userId,
+            kind,
+            count: ids.length,
+            status: nextStatus,
+            error: errorPayload,
+          },
+        });
+      }
 
-      sentCount += ids.length;
+      if (delivery.ok) {
+        sentCount += ids.length;
+      } else {
+        failedCount += ids.length;
+      }
     }
 
     return jsonResponse({
       processed: jobs.length,
       users: grouped.size,
       markedSent: sentCount,
+      failed: failedCount,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unexpected error";

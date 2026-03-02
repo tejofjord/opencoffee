@@ -61,6 +61,19 @@ Deno.serve(async (req) => {
 
     if (error || !data) throw new Error(error?.message || "Failed to open session");
 
+    await admin.from("audit_logs").insert({
+      chapter_id: event.chapter_id,
+      actor_id: user.id,
+      action: "session_open",
+      entity_type: "event",
+      entity_id: body.eventId,
+      payload: {
+        opensAt,
+        closesAt,
+        chunkSize,
+      },
+    });
+
     const baseUrl = (
       Deno.env.get("APP_BASE_URL") || req.headers.get("origin") || "http://localhost:5173"
     ).replace(/\/+$/, "");

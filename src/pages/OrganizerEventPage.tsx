@@ -1,4 +1,21 @@
 import { useEffect, useMemo, useState } from "react";
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { useParams, useSearchParams } from "react-router-dom";
 import { PieTimer } from "../components/PieTimer";
 import { UrlCard } from "../components/UrlCard";
@@ -20,6 +37,54 @@ interface SessionMutationResponse {
   session: EventSession;
 }
 
+interface SortableQueueRowProps {
+  item: QueueItem;
+  index: number;
+  onMove: (signupId: string, direction: "up" | "down") => void;
+  onSetActive: (signupId: string) => void;
+}
+
+function SortableQueueRow({ item, index, onMove, onSetActive }: SortableQueueRowProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: item.id,
+  });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.72 : 1,
+  };
+
+  return (
+    <tr ref={setNodeRef} style={style} className={item.active ? "active-row" : ""}>
+      <td>
+        <button
+          type="button"
+          className="ghost drag-handle"
+          aria-label={`Drag ${item.profileName}`}
+          {...attributes}
+          {...listeners}
+        >
+          ⋮⋮
+        </button>{" "}
+        {index + 1}
+      </td>
+      <td>
+        <strong>{item.profileName}</strong>
+        <div className="small muted">{item.project}</div>
+      </td>
+      <td className="small">{item.need}</td>
+      <td>
+        <div className="row">
+          <button onClick={() => onMove(item.id, "up")}>↑</button>
+          <button onClick={() => onMove(item.id, "down")}>↓</button>
+          <button onClick={() => onSetActive(item.id)}>Set active</button>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
 export function OrganizerEventPage() {
   const { user } = useAuth();
   const { eventId } = useParams<{ eventId: string }>();
@@ -38,6 +103,13 @@ export function OrganizerEventPage() {
   const shareStateKey = useMemo(
     () => (eventId ? `opencoffee:session-share:${eventId}` : ""),
     [eventId],
+  );
+
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
   );
 
   async function loadAll() {
@@ -205,15 +277,7 @@ export function OrganizerEventPage() {
     }
   }
 
-  async function moveQueueItem(signupId: string, direction: "up" | "down") {
-    const index = queue.findIndex((item) => item.id === signupId);
-    if (index < 0) return;
-    const nextIndex = direction === "up" ? index - 1 : index + 1;
-    if (nextIndex < 0 || nextIndex >= queue.length) return;
-
-    const nextQueue = [...queue];
-    const [picked] = nextQueue.splice(index, 1);
-    nextQueue.splice(nextIndex, 0, picked);
+  async function reorderQueue(nextQueue: QueueItem[]) {
     setQueue(nextQueue);
 
     try {
@@ -226,6 +290,26 @@ export function OrganizerEventPage() {
       setError(err instanceof Error ? err.message : "Failed to reorder queue");
       await loadAll();
     }
+  }
+
+  async function moveQueueItem(signupId: string, direction: "up" | "down") {
+    const index = queue.findIndex((item) => item.id === signupId);
+    if (index < 0) return;
+    const nextIndex = direction === "up" ? index - 1 : index + 1;
+    if (nextIndex < 0 || nextIndex >= queue.length) return;
+    const nextQueue = arrayMove(queue, index, nextIndex);
+    await reorderQueue(nextQueue);
+  }
+
+  async function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = queue.findIndex((item) => item.id === String(active.id));
+    const newIndex = queue.findIndex((item) => item.id === String(over.id));
+    if (oldIndex < 0 || newIndex < 0) return;
+
+    await reorderQueue(arrayMove(queue, oldIndex, newIndex));
   }
 
   async function shiftChunk(direction: "next" | "prev") {
@@ -291,7 +375,9 @@ export function OrganizerEventPage() {
           <div className="projector-banner">
             <h1>{eventTitle || "OpenCoffee Live Intros"}</h1>
             <p className="small muted">
-              Chunk {session ? session.currentChunkStart + 1 : 1} to {session ? Math.min(session.currentChunkStart + session.chunkSize, queue.length) : queue.length} of {queue.length}
+              Chunk {session ? session.currentChunkStart + 1 : 1} to{" "}
+              {session ? Math.min(session.currentChunkStart + session.chunkSize, queue.length) : queue.length} of{" "}
+              {queue.length}
             </p>
           </div>
 
@@ -311,10 +397,18 @@ export function OrganizerEventPage() {
               {activeItem ? (
                 <>
                   <h2>{activeItem.profileName}</h2>
-                  <p><strong>Who:</strong> {activeItem.who}</p>
-                  <p><strong>Project:</strong> {activeItem.project}</p>
-                  <p><strong>Need:</strong> {activeItem.need}</p>
-                  <p><strong>Can help:</strong> {activeItem.canHelp}</p>
+                  <p>
+                    <strong>Who:</strong> {activeItem.who}
+                  </p>
+                  <p>
+                    <strong>Project:</strong> {activeItem.project}
+                  </p>
+                  <p>
+                    <strong>Need:</strong> {activeItem.need}
+                  </p>
+                  <p>
+                    <strong>Can help:</strong> {activeItem.canHelp}
+                  </p>
 
                   {session ? (
                     <PieTimer
@@ -404,37 +498,33 @@ export function OrganizerEventPage() {
         )}
 
         <h2>Queue</h2>
-        <p className="small muted">Chunk of 10 with FCFS default and manual reorder.</p>
+        <p className="small muted">Chunk of 10 with FCFS default and drag/drop reorder.</p>
 
-        <table className="queue-table">
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Presenter</th>
-              <th>Need</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {queue.map((item, index) => (
-              <tr key={item.id} className={item.active ? "active-row" : ""}>
-                <td>{index + 1}</td>
-                <td>
-                  <strong>{item.profileName}</strong>
-                  <div className="small muted">{item.project}</div>
-                </td>
-                <td className="small">{item.need}</td>
-                <td>
-                  <div className="row">
-                    <button onClick={() => void moveQueueItem(item.id, "up")}>↑</button>
-                    <button onClick={() => void moveQueueItem(item.id, "down")}>↓</button>
-                    <button onClick={() => void setActive(item.id)}>Set active</button>
-                  </div>
-                </td>
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <table className="queue-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Presenter</th>
+                <th>Need</th>
+                <th>Actions</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <SortableContext items={queue.map((item) => item.id)} strategy={verticalListSortingStrategy}>
+              <tbody>
+                {queue.map((item, index) => (
+                  <SortableQueueRow
+                    key={item.id}
+                    item={item}
+                    index={index}
+                    onMove={(signupId, direction) => void moveQueueItem(signupId, direction)}
+                    onSetActive={(signupId) => void setActive(signupId)}
+                  />
+                ))}
+              </tbody>
+            </SortableContext>
+          </table>
+        </DndContext>
       </section>
 
       <section className="panel projector">

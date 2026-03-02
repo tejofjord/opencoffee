@@ -61,27 +61,7 @@ Deno.serve(async (req) => {
       throw new Error("Valid token or PIN is required");
     }
 
-    const { data: existing } = await admin
-      .from("event_signups")
-      .select("id, queue_position")
-      .eq("event_id", body.eventId)
-      .eq("user_id", user.id)
-      .maybeSingle();
-
-    let queuePosition = existing?.queue_position;
-    if (!queuePosition) {
-      const { data: maxRows } = await admin
-        .from("event_signups")
-        .select("queue_position")
-        .eq("event_id", body.eventId)
-        .order("queue_position", { ascending: false })
-        .limit(1);
-      queuePosition = (maxRows?.[0]?.queue_position ?? 0) + 1;
-    }
-
-    const payload = {
-      event_id: body.eventId,
-      user_id: user.id,
+    const signupFields = {
       who: body.who.trim(),
       project: body.project.trim(),
       need: body.need.trim(),
@@ -89,21 +69,29 @@ Deno.serve(async (req) => {
       website_url: sanitizeUrl(body.websiteUrl),
       linkedin_url: sanitizeUrl(body.linkedinUrl),
       short_bio: body.shortBio?.trim() || null,
-      queue_position: queuePosition,
-      status: "queued",
     };
 
-    const { data: signup, error: upsertError } = await admin
-      .from("event_signups")
-      .upsert(payload, { onConflict: "event_id,user_id" })
-      .select("id, queue_position")
-      .single();
+    const { data: upsertedRows, error: upsertError } = await admin.rpc("upsert_event_signup", {
+      p_event_id: body.eventId,
+      p_user_id: user.id,
+      p_who: signupFields.who,
+      p_project: signupFields.project,
+      p_need: signupFields.need,
+      p_can_help: signupFields.can_help,
+      p_website_url: signupFields.website_url,
+      p_linkedin_url: signupFields.linkedin_url,
+      p_short_bio: signupFields.short_bio,
+    });
+    if (upsertError) throw new Error(upsertError.message);
 
-    if (upsertError || !signup) throw new Error(upsertError?.message || "Failed to save signup");
+    const upserted = Array.isArray(upsertedRows) ? upsertedRows[0] : upsertedRows;
+    if (!upserted?.signup_id || typeof upserted.queue_position !== "number") {
+      throw new Error("Failed to save signup");
+    }
 
     return jsonResponse({
-      signupId: signup.id,
-      queuePosition: signup.queue_position,
+      signupId: upserted.signup_id,
+      queuePosition: upserted.queue_position,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unexpected error";

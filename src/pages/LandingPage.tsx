@@ -1,43 +1,29 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { invokeFunction } from "../lib/functions";
 
-interface FeaturedEvent {
+interface PublicEvent {
   id: string;
-  name: string;
-  date: string;
-  location: string;
-  link: string;
-  image: string;
+  chapterId: string;
+  chapterName: string;
+  chapterSlug: string | null;
+  title: string;
+  venue: string | null;
+  startsAt: string;
+  endsAt: string;
+  status: "draft" | "published" | "cancelled";
 }
 
-const featuredEvents: FeaturedEvent[] = [
-  {
-    id: "oslo",
-    name: "Open Coffee Oslo",
-    date: "2026-03-12T08:30:00+01:00",
-    location: "Mesh Nationaltheatret, Oslo",
-    link: "https://www.meetup.com/open-coffee-oslo/events/313478558/?eventOrigin=home_next_event_you_are_hosting",
-    image:
-      "https://images.unsplash.com/photo-1511920170033-f8396924c348?auto=format&fit=crop&q=80&w=900",
-  },
-  {
-    id: "krakow",
-    name: "Open Coffee Krakow",
-    date: "2026-03-19T08:30:00+01:00",
-    location: "Cluster Cowork, Krakow",
-    link: "mailto:hello@opencoffee.club?subject=Open%20Coffee%20Krakow",
-    image:
-      "https://images.unsplash.com/photo-1528605248644-14dd04022da1?auto=format&fit=crop&q=80&w=900",
-  },
-  {
-    id: "london",
-    name: "Open Coffee London",
-    date: "2026-03-26T08:30:00+00:00",
-    location: "Campus London",
-    link: "mailto:hello@opencoffee.club?subject=Open%20Coffee%20London",
-    image:
-      "https://images.unsplash.com/photo-1542181961-9590d0c79dab?auto=format&fit=crop&q=80&w=900",
-  },
+interface PublicEventsResponse {
+  events: PublicEvent[];
+}
+
+const fallbackImages = [
+  "https://images.unsplash.com/photo-1511920170033-f8396924c348?auto=format&fit=crop&q=80&w=900",
+  "https://images.unsplash.com/photo-1528605248644-14dd04022da1?auto=format&fit=crop&q=80&w=900",
+  "https://images.unsplash.com/photo-1542181961-9590d0c79dab?auto=format&fit=crop&q=80&w=900",
+  "https://images.unsplash.com/photo-1481833761820-0509d3217039?auto=format&fit=crop&q=80&w=900",
 ];
 
 function formatEventDate(input: string): string {
@@ -53,6 +39,21 @@ function formatEventDate(input: string): string {
 export function LandingPage() {
   const { user } = useAuth();
   const appEntry = user ? "/app" : "/auth?redirect=/app";
+  const [featuredEvents, setFeaturedEvents] = useState<PublicEvent[]>([]);
+  const [eventsError, setEventsError] = useState<string | null>(null);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const response = await invokeFunction<{ limit: number }, PublicEventsResponse>("public-events", {
+          limit: 8,
+        });
+        setFeaturedEvents((response.events ?? []).slice(0, 6));
+      } catch (err) {
+        setEventsError(err instanceof Error ? err.message : "Could not load events");
+      }
+    })();
+  }, []);
 
   return (
     <div className="landing-root">
@@ -152,15 +153,22 @@ export function LandingPage() {
         <section id="events" className="landing-section-padded">
           <div className="landing-container">
             <div className="landing-section-header">
-              <h2>Upcoming Meetups</h2>
+              <h2>Upcoming Events</h2>
               <p>Join a chapter and get into the presenter queue from your phone.</p>
             </div>
+
+            {eventsError ? <p className="error">{eventsError}</p> : null}
+
             <div className="landing-events-grid">
-              {featuredEvents.map((event) => {
-                const date = new Date(event.date);
+              {featuredEvents.length === 0 ? <p className="muted">No upcoming events published yet.</p> : null}
+              {featuredEvents.map((event, index) => {
+                const date = new Date(event.startsAt);
                 return (
                   <article key={event.id} className="landing-event-card">
-                    <div className="landing-event-image" style={{ backgroundImage: `url('${event.image}')` }}>
+                    <div
+                      className="landing-event-image"
+                      style={{ backgroundImage: `url('${fallbackImages[index % fallbackImages.length]}')` }}
+                    >
                       <div className="landing-date-badge">
                         <span className="landing-day">{date.getDate()}</span>
                         <span className="landing-month">
@@ -169,12 +177,12 @@ export function LandingPage() {
                       </div>
                     </div>
                     <div className="landing-event-details">
-                      <h3>{event.name}</h3>
-                      <p>{formatEventDate(event.date)}</p>
-                      <p>{event.location}</p>
-                      <a href={event.link} className="landing-link-btn" target="_blank" rel="noreferrer">
+                      <h3>{event.title}</h3>
+                      <p>{formatEventDate(event.startsAt)}</p>
+                      <p>{event.venue || event.chapterName}</p>
+                      <Link to={`/auth?redirect=${encodeURIComponent(`/app/events/${event.id}/join`)}`} className="landing-link-btn">
                         Join list →
-                      </a>
+                      </Link>
                     </div>
                   </article>
                 );
@@ -191,7 +199,7 @@ export function LandingPage() {
                 We provide the format and software. You run the local chapter and community. Oslo is
                 first, but the platform is built for many chapters.
               </p>
-              <a href="mailto:hello@opencoffee.club" className="landing-btn landing-btn-primary">
+              <a href="mailto:hello@opencoff.ee" className="landing-btn landing-btn-primary">
                 Request Chapter Kit
               </a>
             </div>

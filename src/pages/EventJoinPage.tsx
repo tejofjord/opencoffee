@@ -6,6 +6,8 @@ import type { SignupSubmission } from "../types/domain";
 interface SessionJoinResponse {
   allowed: boolean;
   message: string;
+  remainingAttempts?: number;
+  retryAfterSeconds?: number;
 }
 
 interface SignupUpsertResponse {
@@ -110,7 +112,14 @@ export function EventJoinPage() {
       });
 
       if (!response.allowed) {
-        setError(response.message);
+        const details: string[] = [response.message];
+        if (typeof response.remainingAttempts === "number") {
+          details.push(`Remaining attempts: ${response.remainingAttempts}`);
+        }
+        if (typeof response.retryAfterSeconds === "number") {
+          details.push(`Try again in ${response.retryAfterSeconds}s`);
+        }
+        setError(details.join(" "));
         setVerified(false);
         setStatus(null);
         return;

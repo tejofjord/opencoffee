@@ -25,6 +25,7 @@ Deno.serve(async (req) => {
       .update({
         status: "closed",
         timer_started_at: null,
+        timer_elapsed_seconds: 0,
         updated_by: user.id,
       })
       .eq("event_id", body.eventId)
@@ -34,6 +35,17 @@ Deno.serve(async (req) => {
       .single();
 
     if (error || !data) throw new Error(error?.message || "Session not found");
+
+    await admin.from("audit_logs").insert({
+      chapter_id: event.chapter_id,
+      actor_id: user.id,
+      action: "session_close",
+      entity_type: "event",
+      entity_id: body.eventId,
+      payload: {
+        closesAt: data.closes_at,
+      },
+    });
 
     return jsonResponse({
       session: {
