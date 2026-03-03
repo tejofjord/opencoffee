@@ -9,7 +9,7 @@ interface QueueReorderBody {
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return new Response("ok", { headers: corsHeaders(req) });
   }
 
   try {
@@ -31,9 +31,9 @@ Deno.serve(async (req) => {
     });
     if (reorderError) throw new Error(reorderError.message);
 
-    return jsonResponse({ ok: true });
+    return jsonResponse({ ok: true }, 200, req);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unexpected error";
-    return jsonResponse({ error: message }, 400);
+    return jsonResponse({ error: message }, 400, req);
   }
 });

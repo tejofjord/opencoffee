@@ -14,7 +14,7 @@ interface EventUpsertBody {
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return new Response("ok", { headers: corsHeaders(req) });
   }
 
   try {
@@ -66,7 +66,7 @@ Deno.serve(async (req) => {
         },
       });
 
-      return jsonResponse({ event: data });
+      return jsonResponse({ event: data }, 200, req);
     }
 
     if (!body.chapterId) throw new Error("chapterId is required when creating an event");
@@ -99,9 +99,9 @@ Deno.serve(async (req) => {
       },
     });
 
-    return jsonResponse({ event: data });
+    return jsonResponse({ event: data }, 200, req);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unexpected error";
-    return jsonResponse({ error: message }, 400);
+    return jsonResponse({ error: message }, 400, req);
   }
 });

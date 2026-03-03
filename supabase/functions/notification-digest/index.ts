@@ -85,11 +85,11 @@ async function sendDigestEmail(
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return new Response("ok", { headers: corsHeaders(req) });
   }
 
   if (!isAuthorized(req)) {
-    return jsonResponse({ error: "Unauthorized" }, 401);
+    return jsonResponse({ error: "Unauthorized" }, 401, req);
   }
 
   try {
@@ -107,7 +107,7 @@ Deno.serve(async (req) => {
 
     const jobs = (data ?? []) as DigestItem[];
     if (jobs.length === 0) {
-      return jsonResponse({ processed: 0, users: 0 });
+      return jsonResponse({ processed: 0, users: 0 }, 200, req);
     }
 
     const grouped = new Map<string, DigestItem[]>();
@@ -194,10 +194,10 @@ Deno.serve(async (req) => {
       users: grouped.size,
       markedSent: sentCount,
       failed: failedCount,
-    });
+    }, 200, req);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unexpected error";
-    return jsonResponse({ error: message }, 400);
+    return jsonResponse({ error: message }, 400, req);
   }
 });
 

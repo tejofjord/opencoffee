@@ -31,7 +31,7 @@ function getSourceIp(req: Request): string {
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return new Response("ok", { headers: corsHeaders(req) });
   }
 
   try {
@@ -74,7 +74,7 @@ Deno.serve(async (req) => {
         message: "Too many invalid attempts. Try again shortly.",
         remainingAttempts: 0,
         retryAfterSeconds,
-      });
+      }, 200, req);
     }
 
     const { data: session, error: sessionError } = await admin
@@ -88,16 +88,16 @@ Deno.serve(async (req) => {
     }
 
     if (session.status !== "open") {
-      return jsonResponse({ allowed: false, message: "Signup window is closed" });
+      return jsonResponse({ allowed: false, message: "Signup window is closed" }, 200, req);
     }
 
     const now = new Date();
     if (session.opens_at && now < new Date(session.opens_at)) {
-      return jsonResponse({ allowed: false, message: "Signup has not opened yet" });
+      return jsonResponse({ allowed: false, message: "Signup has not opened yet" }, 200, req);
     }
 
     if (session.closes_at && now > new Date(session.closes_at)) {
-      return jsonResponse({ allowed: false, message: "Signup window is closed" });
+      return jsonResponse({ allowed: false, message: "Signup window is closed" }, 200, req);
     }
 
     const matchesToken = body.token ? (await sha256(body.token)) === session.qr_token_hash : false;
@@ -154,6 +154,8 @@ Deno.serve(async (req) => {
           remainingAttempts: remainingAttemptsValue,
           retryAfterSeconds: throttled ? retryAfterSeconds : undefined,
         },
+        200,
+        req,
       );
     }
 
@@ -182,9 +184,9 @@ Deno.serve(async (req) => {
         USER_ATTEMPT_LIMIT,
         IP_ATTEMPT_LIMIT,
       ),
-    });
+    }, 200, req);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unexpected error";
-    return jsonResponse({ allowed: false, message }, 400);
+    return jsonResponse({ allowed: false, message }, 400, req);
   }
 });

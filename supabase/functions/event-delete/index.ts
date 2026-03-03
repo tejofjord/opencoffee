@@ -9,7 +9,7 @@ interface EventDeleteBody {
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return new Response("ok", { headers: corsHeaders(req) });
   }
 
   try {
@@ -42,7 +42,7 @@ Deno.serve(async (req) => {
         payload: {},
       });
 
-      return jsonResponse({ ok: true, mode });
+      return jsonResponse({ ok: true, mode }, 200, req);
     }
 
     const { error } = await admin.from("events").delete().eq("id", body.eventId);
@@ -57,9 +57,9 @@ Deno.serve(async (req) => {
       payload: {},
     });
 
-    return jsonResponse({ ok: true, mode });
+    return jsonResponse({ ok: true, mode }, 200, req);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unexpected error";
-    return jsonResponse({ error: message }, 400);
+    return jsonResponse({ error: message }, 400, req);
   }
 });

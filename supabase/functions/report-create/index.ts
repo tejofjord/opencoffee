@@ -11,7 +11,7 @@ interface ReportCreateBody {
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return new Response("ok", { headers: corsHeaders(req) });
   }
 
   try {
@@ -45,9 +45,9 @@ Deno.serve(async (req) => {
 
     if (error || !data) throw new Error(error?.message || "Failed to create report");
 
-    return jsonResponse({ reportId: data.id });
+    return jsonResponse({ reportId: data.id }, 200, req);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unexpected error";
-    return jsonResponse({ error: message }, 400);
+    return jsonResponse({ error: message }, 400, req);
   }
 });
