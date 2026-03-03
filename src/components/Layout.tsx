@@ -1,5 +1,6 @@
 import { NavLink, Outlet } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { useChapter } from "../context/ChapterContext";
 
 const navItems = [
   { to: "/app", label: "Home" },
@@ -9,7 +10,8 @@ const navItems = [
 ];
 
 export function Layout() {
-  const { user, signOut } = useAuth();
+  const { user, isSuperAdmin, signOut } = useAuth();
+  const { chapters, chapterId, setChapterId } = useChapter();
 
   return (
     <div className="app-root">
@@ -27,6 +29,20 @@ export function Layout() {
           ))}
         </nav>
         <div className="topbar-meta">
+          {isSuperAdmin && chapters.length > 1 && (
+            <div className="chapter-selector">
+              <select
+                value={chapterId ?? ""}
+                onChange={(e) => setChapterId(e.target.value)}
+              >
+                {chapters.map((ch) => (
+                  <option key={ch.id} value={ch.id}>
+                    {ch.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           {user ? (
             <>
               <span className="muted small">{user.email}</span>

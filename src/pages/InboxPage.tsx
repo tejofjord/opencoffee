@@ -1,6 +1,8 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { Loading } from "../components/Loading";
 import { useAuth } from "../context/AuthContext";
-import { getPrimaryMembership } from "../lib/data";
+import { useChapter } from "../context/ChapterContext";
+import { useToast } from "../context/ToastContext";
 import { invokeFunction } from "../lib/functions";
 import { supabase } from "../lib/supabase";
 import type { ConnectionRequest } from "../types/domain";
@@ -11,6 +13,7 @@ interface Conversation {
   user_a_id: string;
   user_b_id: string;
   created_at: string;
+  otherName: string | null;
 }
 
 interface ChatMessage {
@@ -23,7 +26,8 @@ interface ChatMessage {
 
 export function InboxPage() {
   const { user } = useAuth();
-  const [chapterId, setChapterId] = useState<string>("");
+  const { chapterId, loading: chapterLoading } = useChapter();
+  const { showToast } = useToast();
 
   const [incoming, setIncoming] = useState<ConnectionRequest[]>([]);
   const [outgoing, setOutgoing] = useState<ConnectionRequest[]>([]);
@@ -32,28 +36,101 @@ export function InboxPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState("");
 
-  const [status, setStatus] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const loadRequests = useCallback(async () => {
+    if (!user || !chapterId) return;
 
-  useEffect(() => {
-    if (!user) return;
+    const { data, error: requestError } = await supabase
+      .from("connection_requests")
+      .select(
+        "id, chapter_id, event_id, requester_id, target_user_id, request_type, message, status, created_at, requester:profiles!connection_requests_requester_id_fkey(display_name), target:profiles!connection_requests_target_user_id_fkey(display_name)",
+      )
+      .eq("chapter_id", chapterId)
+      .or(`requester_id.eq.${user.id},target_user_id.eq.${user.id}`)
+      .order("created_at", { ascending: false });
 
-    void (async () => {
-      try {
-        const membership = await getPrimaryMembership(user);
-        setChapterId(membership.chapter_id);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load membership");
-      }
-    })();
-  }, [user]);
+    if (requestError) {
+      showToast(requestError.message, "error");
+      return;
+    }
+
+    const mapped: ConnectionRequest[] = (data ?? []).map((row: Record<string, unknown>) => {
+      const requesterProfile = Array.isArray(row.requester) ? row.requester[0] : row.requester;
+      const targetProfile = Array.isArray(row.target) ? row.target[0] : row.target;
+      return {
+        id: row.id as string,
+        chapterId: row.chapter_id as string,
+        eventId: row.event_id as string | null,
+        requesterId: row.requester_id as string,
+        targetUserId: row.target_user_id as string,
+        requesterName: (requesterProfile as { display_name?: string } | null)?.display_name ?? null,
+        targetName: (targetProfile as { display_name?: string } | null)?.display_name ?? null,
+        requestType: row.request_type as ConnectionRequest["requestType"],
+        message: row.message as string | null,
+        status: row.status as ConnectionRequest["status"],
+        createdAt: row.created_at as string,
+      };
+    });
+
+    setIncoming(mapped.filter((request) => request.targetUserId === user.id));
+    setOutgoing(mapped.filter((request) => request.requesterId === user.id));
+  }, [user, chapterId, showToast]);
+
+  const loadConversations = useCallback(async () => {
+    if (!user || !chapterId) return;
+
+    const { data, error: conversationError } = await supabase
+      .from("conversations")
+      .select(
+        "id, chapter_id, user_a_id, user_b_id, created_at, user_a:profiles!conversations_user_a_id_fkey(display_name), user_b:profiles!conversations_user_b_id_fkey(display_name)",
+      )
+      .eq("chapter_id", chapterId)
+      .or(`user_a_id.eq.${user.id},user_b_id.eq.${user.id}`)
+      .order("created_at", { ascending: false });
+
+    if (conversationError) {
+      showToast(conversationError.message, "error");
+      return;
+    }
+
+    const mapped: Conversation[] = (data ?? []).map((row: Record<string, unknown>) => {
+      const isUserA = row.user_a_id === user.id;
+      const otherProfile = isUserA
+        ? (Array.isArray(row.user_b) ? row.user_b[0] : row.user_b)
+        : (Array.isArray(row.user_a) ? row.user_a[0] : row.user_a);
+      return {
+        id: row.id as string,
+        chapter_id: row.chapter_id as string,
+        user_a_id: row.user_a_id as string,
+        user_b_id: row.user_b_id as string,
+        created_at: row.created_at as string,
+        otherName: (otherProfile as { display_name?: string } | null)?.display_name ?? null,
+      };
+    });
+
+    setConversations(mapped);
+
+    if (!activeConversationId && mapped.length > 0) {
+      setActiveConversationId(mapped[0].id);
+    }
+  }, [user, chapterId, showToast, activeConversationId]);
 
   useEffect(() => {
     if (!user || !chapterId) return;
     void loadRequests();
     void loadConversations();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id, chapterId]);
+  }, [user?.id, chapterId, loadRequests, loadConversations]);
+
+  // Refetch on tab focus
+  useEffect(() => {
+    function handleVisibility() {
+      if (document.visibilityState === "visible" && chapterId) {
+        void loadRequests();
+        void loadConversations();
+      }
+    }
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, [chapterId, loadRequests, loadConversations]);
 
   useEffect(() => {
     if (!activeConversationId) {
@@ -89,59 +166,6 @@ export function InboxPage() {
     [activeConversationId, conversations],
   );
 
-  async function loadRequests() {
-    if (!user) return;
-
-    const { data, error: requestError } = await supabase
-      .from("connection_requests")
-      .select("id, chapter_id, event_id, requester_id, target_user_id, request_type, message, status, created_at")
-      .eq("chapter_id", chapterId)
-      .or(`requester_id.eq.${user.id},target_user_id.eq.${user.id}`)
-      .order("created_at", { ascending: false });
-
-    if (requestError) {
-      setError(requestError.message);
-      return;
-    }
-
-    const mapped: ConnectionRequest[] = (data ?? []).map((row) => ({
-      id: row.id,
-      chapterId: row.chapter_id,
-      eventId: row.event_id,
-      requesterId: row.requester_id,
-      targetUserId: row.target_user_id,
-      requestType: row.request_type,
-      message: row.message,
-      status: row.status,
-      createdAt: row.created_at,
-    }));
-
-    setIncoming(mapped.filter((request) => request.targetUserId === user.id));
-    setOutgoing(mapped.filter((request) => request.requesterId === user.id));
-  }
-
-  async function loadConversations() {
-    if (!user) return;
-
-    const { data, error: conversationError } = await supabase
-      .from("conversations")
-      .select("id, chapter_id, user_a_id, user_b_id, created_at")
-      .eq("chapter_id", chapterId)
-      .or(`user_a_id.eq.${user.id},user_b_id.eq.${user.id}`)
-      .order("created_at", { ascending: false });
-
-    if (conversationError) {
-      setError(conversationError.message);
-      return;
-    }
-
-    setConversations(data ?? []);
-
-    if (!activeConversationId && data && data.length > 0) {
-      setActiveConversationId(data[0].id);
-    }
-  }
-
   async function loadMessages(conversationId: string) {
     const { data, error: messageError } = await supabase
       .from("messages")
@@ -150,7 +174,7 @@ export function InboxPage() {
       .order("created_at", { ascending: true });
 
     if (messageError) {
-      setError(messageError.message);
+      showToast(messageError.message, "error");
       return;
     }
 
@@ -158,21 +182,16 @@ export function InboxPage() {
   }
 
   async function respond(requestId: string, decision: "accept" | "decline") {
-    setError(null);
-
     try {
       await invokeFunction<{ requestId: string; decision: "accept" | "decline" }, { ok: boolean }>(
         "connect-respond",
-        {
-          requestId,
-          decision,
-        },
+        { requestId, decision },
       );
-      setStatus(`Request ${decision}ed.`);
+      showToast(`Request ${decision}ed.`, "success");
       await loadRequests();
       await loadConversations();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to respond");
+      showToast(err instanceof Error ? err.message : "Failed to respond", "error");
     }
   }
 
@@ -188,25 +207,27 @@ export function InboxPage() {
       setDraft("");
       await loadMessages(activeConversationId);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to send message");
+      showToast(err instanceof Error ? err.message : "Failed to send message", "error");
     }
   }
+
+  if (chapterLoading) return <Loading />;
 
   return (
     <div className="grid inbox-layout">
       <section className="panel">
-        <h1>Connection Requests</h1>
+        <h2>Connection Requests</h2>
         <h3>Incoming</h3>
         <div className="stack gap-sm">
           {incoming.filter((item) => item.status === "pending").length === 0 ? (
-            <p className="muted">No pending incoming requests.</p>
+            <p className="empty-state">No pending incoming requests.</p>
           ) : null}
           {incoming
             .filter((item) => item.status === "pending")
             .map((request) => (
               <article key={request.id} className="card">
                 <p className="small">
-                  Type: {request.requestType} from user {request.requesterId.slice(0, 8)}
+                  Type: {request.requestType} from {request.requesterName ?? "Unknown"}
                 </p>
                 {request.message ? <p>{request.message}</p> : null}
                 <div className="row">
@@ -219,11 +240,13 @@ export function InboxPage() {
 
         <h3>Outgoing</h3>
         <div className="stack gap-sm">
-          {outgoing.length === 0 ? <p className="muted">No sent requests.</p> : null}
+          {outgoing.length === 0 ? (
+            <p className="empty-state">No sent requests.</p>
+          ) : null}
           {outgoing.map((request) => (
             <article key={request.id} className="card">
               <p className="small">
-                To user {request.targetUserId.slice(0, 8)} | {request.requestType}
+                To {request.targetName ?? "Unknown"} | {request.requestType}
               </p>
               <p className="small muted">Status: {request.status}</p>
             </article>
@@ -235,23 +258,18 @@ export function InboxPage() {
         <h2>Chats</h2>
         <div className="row gap-md">
           <div className="conversation-list">
-            {conversations.length === 0 ? <p className="muted">No conversations yet.</p> : null}
-            {conversations.map((conversation) => {
-              const otherId = user
-                ? conversation.user_a_id === user.id
-                  ? conversation.user_b_id
-                  : conversation.user_a_id
-                : conversation.user_a_id;
-              return (
-                <button
-                  key={conversation.id}
-                  className={activeConversationId === conversation.id ? "active" : ""}
-                  onClick={() => setActiveConversationId(conversation.id)}
-                >
-                  User {otherId.slice(0, 8)}
-                </button>
-              );
-            })}
+            {conversations.length === 0 ? (
+              <p className="empty-state">No conversations yet.</p>
+            ) : null}
+            {conversations.map((conversation) => (
+              <button
+                key={conversation.id}
+                className={activeConversationId === conversation.id ? "active" : ""}
+                onClick={() => setActiveConversationId(conversation.id)}
+              >
+                {conversation.otherName ?? "Unknown"}
+              </button>
+            ))}
           </div>
 
           <div className="conversation-panel">
@@ -283,9 +301,6 @@ export function InboxPage() {
           </div>
         </div>
       </section>
-
-      {status ? <p className="success full">{status}</p> : null}
-      {error ? <p className="error full">{error}</p> : null}
     </div>
   );
 }

@@ -2,6 +2,7 @@ export function formatDateTime(iso: string): string {
   return new Date(iso).toLocaleString([], {
     dateStyle: "medium",
     timeStyle: "short",
+    timeZoneName: "short",
   });
 }
 

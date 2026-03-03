@@ -1,10 +1,14 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { ConfirmDialog } from "../components/ConfirmDialog";
+import { Loading } from "../components/Loading";
 import { useAuth } from "../context/AuthContext";
-import { getEventsForChapter, getPrimaryMembership } from "../lib/data";
+import { useChapter } from "../context/ChapterContext";
+import { useToast } from "../context/ToastContext";
+import { getEventsForChapter } from "../lib/data";
 import { invokeFunction } from "../lib/functions";
 import { formatDateTime } from "../lib/time";
-import type { EventRecord, Role } from "../types/domain";
+import type { EventRecord } from "../types/domain";
 
 interface EventDraft {
   eventId?: string;
@@ -31,36 +35,38 @@ function toLocalInput(iso: string): string {
 
 export function HomePage() {
   const { user } = useAuth();
-  const [chapterId, setChapterId] = useState<string | null>(null);
-  const [role, setRole] = useState<Role | null>(null);
+  const { chapterId, role, loading: chapterLoading } = useChapter();
+  const { showToast } = useToast();
   const [events, setEvents] = useState<EventRecord[]>([]);
   const [draft, setDraft] = useState<EventDraft>(initialDraft);
   const [savingEvent, setSavingEvent] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [status, setStatus] = useState<string | null>(null);
+  const [confirmAction, setConfirmAction] = useState<{
+    eventId: string;
+    mode: "cancel" | "hard_delete";
+  } | null>(null);
 
   const canManageEvents = role === "organizer" || role === "admin";
 
-  useEffect(() => {
-    if (!user) return;
-
-    void (async () => {
-      try {
-        const membership = await getPrimaryMembership(user);
-        setChapterId(membership.chapter_id);
-        setRole(membership.role);
-        const chapterEvents = await getEventsForChapter(membership.chapter_id);
-        setEvents(chapterEvents);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load events");
-      }
-    })();
-  }, [user]);
-
-  async function refreshEvents(activeChapterId: string) {
+  const refreshEvents = useCallback(async (activeChapterId: string) => {
     const chapterEvents = await getEventsForChapter(activeChapterId);
     setEvents(chapterEvents);
-  }
+  }, []);
+
+  useEffect(() => {
+    if (!chapterId) return;
+    void refreshEvents(chapterId);
+  }, [chapterId, refreshEvents]);
+
+  // Refetch on tab focus
+  useEffect(() => {
+    function handleVisibility() {
+      if (document.visibilityState === "visible" && chapterId) {
+        void refreshEvents(chapterId);
+      }
+    }
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, [chapterId, refreshEvents]);
 
   async function upsertEvent(event: FormEvent) {
     event.preventDefault();
@@ -68,8 +74,6 @@ export function HomePage() {
     if (!draft.title || !draft.startsAt || !draft.endsAt) return;
 
     setSavingEvent(true);
-    setError(null);
-    setStatus(null);
 
     const payload = {
       eventId: draft.eventId,
@@ -84,10 +88,10 @@ export function HomePage() {
     try {
       await invokeFunction<typeof payload, { event: unknown }>("event-upsert", payload);
       setDraft(initialDraft);
-      setStatus(draft.eventId ? "Event updated." : "Event created.");
+      showToast(draft.eventId ? "Event updated." : "Event created.", "success");
       await refreshEvents(chapterId);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save event");
+      showToast(err instanceof Error ? err.message : "Failed to save event", "error");
     } finally {
       setSavingEvent(false);
     }
@@ -95,26 +99,21 @@ export function HomePage() {
 
   async function removeEvent(eventId: string, mode: "cancel" | "hard_delete") {
     if (!chapterId) return;
-    setError(null);
-    setStatus(null);
 
     try {
       await invokeFunction<{ eventId: string; mode: "cancel" | "hard_delete" }, { ok: boolean }>(
         "event-delete",
-        {
-          eventId,
-          mode,
-        },
+        { eventId, mode },
       );
 
       if (draft.eventId === eventId) {
         setDraft(initialDraft);
       }
 
-      setStatus(mode === "cancel" ? "Event cancelled." : "Event deleted.");
+      showToast(mode === "cancel" ? "Event cancelled." : "Event deleted.", "success");
       await refreshEvents(chapterId);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to delete event");
+      showToast(err instanceof Error ? err.message : "Failed to delete event", "error");
     }
   }
 
@@ -147,12 +146,16 @@ export function HomePage() {
     );
   }
 
+  if (chapterLoading) return <Loading />;
+
   return (
     <div className="grid two-col">
       <section className="panel">
         <h2>Upcoming Events</h2>
         <p className="muted">Oslo-first launch. Multi-chapter model ready.</p>
-        {events.length === 0 ? <p>No events yet.</p> : null}
+        {events.length === 0 ? (
+          <p className="empty-state">No upcoming events.</p>
+        ) : null}
         <div className="stack gap-sm">
           {events.map((event) => (
             <article key={event.id} className="card">
@@ -168,10 +171,16 @@ export function HomePage() {
                     <button className="ghost" onClick={() => startEdit(event)}>
                       Edit
                     </button>
-                    <button className="ghost" onClick={() => void removeEvent(event.id, "cancel")}>
+                    <button
+                      className="ghost"
+                      onClick={() => setConfirmAction({ eventId: event.id, mode: "cancel" })}
+                    >
                       Cancel
                     </button>
-                    <button className="danger" onClick={() => void removeEvent(event.id, "hard_delete")}>
+                    <button
+                      className="danger"
+                      onClick={() => setConfirmAction({ eventId: event.id, mode: "hard_delete" })}
+                    >
                       Delete
                     </button>
                   </>
@@ -250,10 +259,26 @@ export function HomePage() {
             </div>
           </form>
         )}
-
-        {status ? <p className="success">{status}</p> : null}
-        {error ? <p className="error">{error}</p> : null}
       </section>
+
+      <ConfirmDialog
+        open={confirmAction !== null}
+        title={confirmAction?.mode === "hard_delete" ? "Delete event?" : "Cancel event?"}
+        message={
+          confirmAction?.mode === "hard_delete"
+            ? "This will permanently delete this event and all its data."
+            : "This will mark the event as cancelled. Attendees will still see it."
+        }
+        confirmLabel={confirmAction?.mode === "hard_delete" ? "Delete" : "Cancel event"}
+        variant={confirmAction?.mode === "hard_delete" ? "danger" : "default"}
+        onConfirm={() => {
+          if (confirmAction) {
+            void removeEvent(confirmAction.eventId, confirmAction.mode);
+          }
+          setConfirmAction(null);
+        }}
+        onCancel={() => setConfirmAction(null)}
+      />
     </div>
   );
 }

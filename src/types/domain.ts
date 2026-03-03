@@ -43,6 +43,8 @@ export interface ConnectionRequest {
   eventId: string | null;
   requesterId: string;
   targetUserId: string;
+  requesterName: string | null;
+  targetName: string | null;
   requestType: ConnectionRequestType;
   message: string | null;
   status: ConnectionRequestStatus;
@@ -73,6 +75,8 @@ export interface ModerationReport {
   chapterId: string;
   reporterId: string;
   reportedUserId: string;
+  reporterName: string | null;
+  reportedName: string | null;
   reason: string;
   context: string | null;
   status: ReportStatus;

@@ -225,8 +225,9 @@ export function EventJoinPage() {
           <form className="stack" onSubmit={submitSignup}>
             <div className="stepper-head">
               <div className="row wrap step-meta-row">
-                <span className="small muted">Step {currentStep + 1} of {totalSteps}</span>
-                <span className="small muted">{stepLabels[currentStep]}</span>
+                <span className="small muted">
+                  Step {currentStep + 1}/{totalSteps} — {stepLabels[currentStep]}
+                </span>
               </div>
               <div className="step-progress">
                 <span style={{ width: `${progressPct}%` }} />

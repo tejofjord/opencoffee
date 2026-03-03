@@ -22,7 +22,7 @@ import { UrlCard } from "../components/UrlCard";
 import { useAuth } from "../context/AuthContext";
 import { getQueueForEvent, getSessionForEvent } from "../lib/data";
 import { invokeFunction } from "../lib/functions";
-import { buildQrCodeUrl } from "../lib/qr";
+import { useQrDataUrl } from "../lib/qr";
 import { supabase } from "../lib/supabase";
 import { formatDateTime } from "../lib/time";
 import type { EventSession, QueueItem, Role } from "../types/domain";
@@ -76,9 +76,9 @@ function SortableQueueRow({ item, index, onMove, onSetActive }: SortableQueueRow
       <td className="small">{item.need}</td>
       <td>
         <div className="row">
-          <button onClick={() => onMove(item.id, "up")}>↑</button>
-          <button onClick={() => onMove(item.id, "down")}>↓</button>
-          <button onClick={() => onSetActive(item.id)}>Set active</button>
+          <button aria-label={`Move ${item.profileName} up`} onClick={() => onMove(item.id, "up")}>↑</button>
+          <button aria-label={`Move ${item.profileName} down`} onClick={() => onMove(item.id, "down")}>↓</button>
+          <button aria-label={`Set ${item.profileName} active`} onClick={() => onSetActive(item.id)}>Set active</button>
         </div>
       </td>
     </tr>
@@ -99,6 +99,8 @@ export function OrganizerEventPage() {
   const [pin, setPin] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
+
+  const joinQrDataUrl = useQrDataUrl(joinUrl, 220);
 
   const shareStateKey = useMemo(
     () => (eventId ? `opencoffee:session-share:${eventId}` : ""),
@@ -490,8 +492,8 @@ export function OrganizerEventPage() {
                 {pin ? <p className="small">PIN: {pin}</p> : null}
               </div>
 
-              {joinUrl ? (
-                <img className="qr" src={buildQrCodeUrl(joinUrl, 220)} alt="Event join QR code" />
+              {joinQrDataUrl ? (
+                <img className="qr" src={joinQrDataUrl} alt="Event join QR code" />
               ) : null}
             </div>
           </div>

@@ -14,6 +14,7 @@ interface AuthContextValue {
   user: User | null;
   session: Session | null;
   loading: boolean;
+  isSuperAdmin: boolean;
   signOut: () => Promise<void>;
 }
 
@@ -22,6 +23,7 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -43,6 +45,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  // Query superadmin status when user changes
+  useEffect(() => {
+    const userId = session?.user?.id;
+    if (!userId) {
+      setIsSuperAdmin(false);
+      return;
+    }
+
+    let active = true;
+
+    supabase
+      .from("profiles")
+      .select("is_superadmin")
+      .eq("user_id", userId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (active) {
+          setIsSuperAdmin(data?.is_superadmin === true);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [session?.user?.id]);
+
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();
   }, []);
@@ -52,9 +80,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user: session?.user ?? null,
       session,
       loading,
+      isSuperAdmin,
       signOut,
     }),
-    [session, loading, signOut],
+    [session, loading, isSuperAdmin, signOut],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

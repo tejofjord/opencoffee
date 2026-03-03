@@ -1,14 +1,21 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { GraphCanvas } from "../components/GraphCanvas";
+import { Loading } from "../components/Loading";
 import { useAuth } from "../context/AuthContext";
-import { getEventsForChapter, getPrimaryMembership } from "../lib/data";
+import { useChapter } from "../context/ChapterContext";
+import { useToast } from "../context/ToastContext";
+import { getEventsForChapter } from "../lib/data";
 import { invokeFunction } from "../lib/functions";
 import { supabase } from "../lib/supabase";
 import type { EventRecord, GraphEdge, GraphNode } from "../types/domain";
 
+type ConfirmAction = { type: "block" } | { type: "report" };
+
 export function NetworkPage() {
   const { user } = useAuth();
-  const [chapterId, setChapterId] = useState<string>("");
+  const { chapterId, loading: chapterLoading } = useChapter();
+  const { showToast } = useToast();
   const [events, setEvents] = useState<EventRecord[]>([]);
   const [eventFilter, setEventFilter] = useState<string>("all");
   const [dateFrom, setDateFrom] = useState<string>("");
@@ -19,67 +26,22 @@ export function NetworkPage() {
   const [edges, setEdges] = useState<GraphEdge[]>([]);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [requestMessage, setRequestMessage] = useState<string>("");
-  const [status, setStatus] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!user) return;
-
-    void (async () => {
-      try {
-        const membership = await getPrimaryMembership(user);
-        setChapterId(membership.chapter_id);
-        const chapterEvents = await getEventsForChapter(membership.chapter_id);
-        setEvents(chapterEvents);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load chapter context");
-      }
-    })();
-  }, [user]);
+  const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
 
   useEffect(() => {
     if (!chapterId) return;
-    void loadGraph();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chapterId, eventFilter, dateFrom, dateTo]);
+    void (async () => {
+      try {
+        const chapterEvents = await getEventsForChapter(chapterId);
+        setEvents(chapterEvents);
+      } catch (err) {
+        showToast(err instanceof Error ? err.message : "Failed to load events", "error");
+      }
+    })();
+  }, [chapterId, showToast]);
 
-  const selectedNode = useMemo(
-    () => nodes.find((node) => node.id === selectedNodeId) || null,
-    [nodes, selectedNodeId],
-  );
-
-  const normalizedSearch = searchTerm.trim().toLowerCase();
-
-  const visibleNodes = useMemo(() => {
-    if (!normalizedSearch) return nodes;
-
-    return nodes.filter((node) => {
-      const blob = `${node.label} ${node.need} ${node.canHelp} ${node.bio ?? ""}`.toLowerCase();
-      return blob.includes(normalizedSearch);
-    });
-  }, [nodes, normalizedSearch]);
-
-  const visibleNodeIds = useMemo(() => new Set(visibleNodes.map((node) => node.id)), [visibleNodes]);
-
-  const visibleEdges = useMemo(
-    () =>
-      edges.filter((edge) => visibleNodeIds.has(edge.from) && visibleNodeIds.has(edge.to)),
-    [edges, visibleNodeIds],
-  );
-
-  useEffect(() => {
-    if (visibleNodes.length === 0) {
-      setSelectedNodeId(null);
-      return;
-    }
-
-    if (!selectedNodeId || !visibleNodeIds.has(selectedNodeId)) {
-      setSelectedNodeId(visibleNodes[0].id);
-    }
-  }, [selectedNodeId, visibleNodeIds, visibleNodes]);
-
-  async function loadGraph() {
-    setError(null);
+  const loadGraph = useCallback(async () => {
+    if (!chapterId) return;
 
     try {
       const eventIds =
@@ -155,9 +117,61 @@ export function NetworkPage() {
         setSelectedNodeId(nextNodes[0].id);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load graph");
+      showToast(err instanceof Error ? err.message : "Failed to load graph", "error");
     }
-  }
+  }, [chapterId, eventFilter, events, dateFrom, dateTo, selectedNodeId, showToast]);
+
+  useEffect(() => {
+    if (!chapterId || events.length === 0) return;
+    void loadGraph();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chapterId, eventFilter, dateFrom, dateTo, events]);
+
+  // Refetch on tab focus
+  useEffect(() => {
+    function handleVisibility() {
+      if (document.visibilityState === "visible" && chapterId) {
+        void loadGraph();
+      }
+    }
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, [chapterId, loadGraph]);
+
+  const selectedNode = useMemo(
+    () => nodes.find((node) => node.id === selectedNodeId) || null,
+    [nodes, selectedNodeId],
+  );
+
+  const normalizedSearch = searchTerm.trim().toLowerCase();
+
+  const visibleNodes = useMemo(() => {
+    if (!normalizedSearch) return nodes;
+
+    return nodes.filter((node) => {
+      const blob = `${node.label} ${node.need} ${node.canHelp} ${node.bio ?? ""}`.toLowerCase();
+      return blob.includes(normalizedSearch);
+    });
+  }, [nodes, normalizedSearch]);
+
+  const visibleNodeIds = useMemo(() => new Set(visibleNodes.map((node) => node.id)), [visibleNodes]);
+
+  const visibleEdges = useMemo(
+    () =>
+      edges.filter((edge) => visibleNodeIds.has(edge.from) && visibleNodeIds.has(edge.to)),
+    [edges, visibleNodeIds],
+  );
+
+  useEffect(() => {
+    if (visibleNodes.length === 0) {
+      setSelectedNodeId(null);
+      return;
+    }
+
+    if (!selectedNodeId || !visibleNodeIds.has(selectedNodeId)) {
+      setSelectedNodeId(visibleNodes[0].id);
+    }
+  }, [selectedNodeId, visibleNodeIds, visibleNodes]);
 
   async function sendRequest(type: "need_help" | "can_help") {
     if (!selectedNode || !user || !chapterId) return;
@@ -171,10 +185,10 @@ export function NetworkPage() {
         message: requestMessage || null,
       };
       await invokeFunction<typeof payload, { requestId: string }>("connect-request", payload);
-      setStatus(`Request sent (${type}).`);
+      showToast(`Request sent (${type}).`, "success");
       setRequestMessage("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to send request");
+      showToast(err instanceof Error ? err.message : "Failed to send request", "error");
     }
   }
 
@@ -188,11 +202,11 @@ export function NetworkPage() {
     });
 
     if (blockError) {
-      setError(blockError.message);
+      showToast(blockError.message, "error");
       return;
     }
 
-    setStatus("User blocked for this chapter.");
+    showToast("User blocked for this chapter.", "success");
   }
 
   async function reportSelected(event: FormEvent) {
@@ -209,12 +223,14 @@ export function NetworkPage() {
         reason: "chapter_member_report",
         context: requestMessage || undefined,
       });
-      setStatus("Report submitted to organizers.");
+      showToast("Report submitted to organizers.", "success");
       setRequestMessage("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to submit report");
+      showToast(err instanceof Error ? err.message : "Failed to submit report", "error");
     }
   }
+
+  if (chapterLoading) return <Loading />;
 
   return (
     <div className="grid network-layout">
@@ -261,7 +277,7 @@ export function NetworkPage() {
         </div>
 
         {visibleNodes.length === 0 ? (
-          <p className="muted">No presenters match your current filters.</p>
+          <p className="empty-state">No presenters match your current filters.</p>
         ) : (
           <>
             <GraphCanvas
@@ -324,22 +340,43 @@ export function NetworkPage() {
             <div className="row wrap">
               <button onClick={() => void sendRequest("need_help")}>I need this person</button>
               <button onClick={() => void sendRequest("can_help")}>I can help this person</button>
-              <button className="ghost" onClick={() => void blockSelected()}>
+              <button className="ghost" onClick={() => setConfirmAction({ type: "block" })}>
                 Block
               </button>
             </div>
 
-            <form onSubmit={reportSelected}>
-              <button className="danger" type="submit">
-                Report to organizer
-              </button>
-            </form>
+            <button className="danger" onClick={() => setConfirmAction({ type: "report" })}>
+              Report to organizer
+            </button>
           </div>
         )}
       </section>
 
-      {status ? <p className="success full">{status}</p> : null}
-      {error ? <p className="error full">{error}</p> : null}
+      <ConfirmDialog
+        open={confirmAction?.type === "block"}
+        title="Block user?"
+        message={`Block ${selectedNode?.label ?? "this user"} from your chapter network? You won't see each other anymore.`}
+        confirmLabel="Block"
+        variant="danger"
+        onConfirm={() => {
+          void blockSelected();
+          setConfirmAction(null);
+        }}
+        onCancel={() => setConfirmAction(null)}
+      />
+
+      <ConfirmDialog
+        open={confirmAction?.type === "report"}
+        title="Report user?"
+        message={`Submit a report about ${selectedNode?.label ?? "this user"} to the chapter organizers?`}
+        confirmLabel="Report"
+        variant="danger"
+        onConfirm={() => {
+          void reportSelected({ preventDefault: () => {} } as FormEvent);
+          setConfirmAction(null);
+        }}
+        onCancel={() => setConfirmAction(null)}
+      />
     </div>
   );
 }
