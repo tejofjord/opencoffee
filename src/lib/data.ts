@@ -2,6 +2,16 @@ import type { User } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
 import type { EventRecord, EventSession, QueueItem } from "../types/domain";
 
+export async function getAllChapters() {
+  const { data, error } = await supabase
+    .from("chapters")
+    .select("id, slug, name, timezone, status")
+    .order("name", { ascending: true });
+
+  if (error) throw error;
+  return data ?? [];
+}
+
 export async function getPrimaryMembership(user: User) {
   const { data, error } = await supabase
     .from("chapter_memberships")

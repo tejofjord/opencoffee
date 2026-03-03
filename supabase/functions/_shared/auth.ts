@@ -16,6 +16,28 @@ export async function requireUser(req: Request, admin: SupabaseClient): Promise<
   return data.user;
 }
 
+export async function isSuperAdmin(
+  admin: SupabaseClient,
+  userId: string,
+): Promise<boolean> {
+  const { data, error } = await admin
+    .from("profiles")
+    .select("is_superadmin")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (error) return false;
+  return data?.is_superadmin === true;
+}
+
+export async function requireSuperAdmin(
+  admin: SupabaseClient,
+  userId: string,
+): Promise<void> {
+  const sa = await isSuperAdmin(admin, userId);
+  if (!sa) throw new Error("Superadmin role required");
+}
+
 export async function getEvent(admin: SupabaseClient, eventId: string) {
   const { data, error } = await admin
     .from("events")
@@ -48,6 +70,7 @@ export async function requireChapterMember(
   chapterId: string,
   userId: string,
 ): Promise<void> {
+  if (await isSuperAdmin(admin, userId)) return;
   const role = await getMembershipRole(admin, chapterId, userId);
   if (!role) throw new Error("Chapter membership required");
 }
@@ -57,6 +80,7 @@ export async function requireOrganizer(
   chapterId: string,
   userId: string,
 ): Promise<void> {
+  if (await isSuperAdmin(admin, userId)) return;
   const role = await getMembershipRole(admin, chapterId, userId);
   if (!role || (role !== "organizer" && role !== "admin")) {
     throw new Error("Organizer role required");
@@ -76,7 +100,10 @@ export async function assertConversationParticipant(
 
   if (error || !data) throw new Error("Conversation not found");
   if (data.user_a_id !== userId && data.user_b_id !== userId) {
-    throw new Error("Not a conversation participant");
+    // Superadmins can access any conversation
+    if (!(await isSuperAdmin(admin, userId))) {
+      throw new Error("Not a conversation participant");
+    }
   }
 
   return data;
