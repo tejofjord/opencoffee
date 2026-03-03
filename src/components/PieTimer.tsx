@@ -30,7 +30,9 @@ export function PieTimer({ durationSeconds = 60, startedAt, elapsedSeconds }: Pi
           background: `conic-gradient(var(--accent) ${angle}deg, rgba(255,255,255,0.18) ${angle}deg)`,
         }}
       />
-      <div className="pie-label">{Math.max(0, Math.ceil(durationSeconds - consumed))}s</div>
+      <div className="pie-label" aria-hidden>
+        ●
+      </div>
     </div>
   );
 }

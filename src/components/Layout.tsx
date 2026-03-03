@@ -2,10 +2,10 @@ import { NavLink, Outlet } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
 const navItems = [
-  { to: "/", label: "Home" },
-  { to: "/network", label: "Network" },
-  { to: "/inbox", label: "Inbox" },
-  { to: "/moderation", label: "Moderation" },
+  { to: "/app", label: "Home" },
+  { to: "/app/network", label: "Network" },
+  { to: "/app/inbox", label: "Inbox" },
+  { to: "/app/moderation", label: "Moderation" },
 ];
 
 export function Layout() {
@@ -35,7 +35,7 @@ export function Layout() {
               </button>
             </>
           ) : (
-            <NavLink to="/auth">Sign in</NavLink>
+            <NavLink to="/auth?redirect=/app">Sign in</NavLink>
           )}
         </div>
       </header>

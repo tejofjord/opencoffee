@@ -9,7 +9,7 @@ interface QueueReorderBody {
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return new Response("ok", { headers: corsHeaders(req) });
   }
 
   try {
@@ -24,30 +24,16 @@ Deno.serve(async (req) => {
     const event = await getEvent(admin, body.eventId);
     await requireOrganizer(admin, event.chapter_id, user.id);
 
-    for (const [index, signupId] of body.orderedSignupIds.entries()) {
-      const { error } = await admin
-        .from("event_signups")
-        .update({ queue_position: index + 1 })
-        .eq("id", signupId)
-        .eq("event_id", body.eventId);
+    const { error: reorderError } = await admin.rpc("reorder_event_queue", {
+      p_event_id: body.eventId,
+      p_ordered_signup_ids: body.orderedSignupIds,
+      p_actor_id: user.id,
+    });
+    if (reorderError) throw new Error(reorderError.message);
 
-      if (error) throw new Error(error.message);
-    }
-
-    await admin
-      .from("audit_logs")
-      .insert({
-        chapter_id: event.chapter_id,
-        actor_id: user.id,
-        action: "queue_reorder",
-        entity_type: "event",
-        entity_id: body.eventId,
-        payload: { count: body.orderedSignupIds.length },
-      });
-
-    return jsonResponse({ ok: true });
+    return jsonResponse({ ok: true }, 200, req);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unexpected error";
-    return jsonResponse({ error: message }, 400);
+    return jsonResponse({ error: message }, 400, req);
   }
 });

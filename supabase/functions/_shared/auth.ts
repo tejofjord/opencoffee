@@ -88,15 +88,19 @@ export async function assertNotBlocked(
   userA: string,
   userB: string,
 ): Promise<void> {
-  const { data, error } = await admin
+  const { count, error } = await admin
     .from("user_blocks")
-    .select("id")
+    .select("id", { count: "exact", head: true })
     .eq("chapter_id", chapterId)
-    .or(`and(blocker_id.eq.${userA},blocked_id.eq.${userB}),and(blocker_id.eq.${userB},blocked_id.eq.${userA})`)
-    .limit(1);
+    .or(
+      [
+        `and(blocker_id.eq.${userA},blocked_id.eq.${userB})`,
+        `and(blocker_id.eq.${userB},blocked_id.eq.${userA})`,
+      ].join(","),
+    );
 
   if (error) throw new Error(error.message);
-  if ((data ?? []).length > 0) {
+  if ((count ?? 0) > 0) {
     throw new Error("Communication blocked");
   }
 }

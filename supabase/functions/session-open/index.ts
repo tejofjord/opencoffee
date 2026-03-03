@@ -12,7 +12,7 @@ interface SessionOpenBody {
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return new Response("ok", { headers: corsHeaders(req) });
   }
 
   try {
@@ -61,10 +61,25 @@ Deno.serve(async (req) => {
 
     if (error || !data) throw new Error(error?.message || "Failed to open session");
 
-    const baseUrl = Deno.env.get("APP_BASE_URL") || req.headers.get("origin") || "http://localhost:5173";
+    await admin.from("audit_logs").insert({
+      chapter_id: event.chapter_id,
+      actor_id: user.id,
+      action: "session_open",
+      entity_type: "event",
+      entity_id: body.eventId,
+      payload: {
+        opensAt,
+        closesAt,
+        chunkSize,
+      },
+    });
+
+    const baseUrl = (
+      Deno.env.get("APP_BASE_URL") || req.headers.get("origin") || "http://localhost:5173"
+    ).replace(/\/+$/, "");
 
     return jsonResponse({
-      joinUrl: `${baseUrl}/events/${body.eventId}/join?token=${token}`,
+      joinUrl: `${baseUrl}/app/events/${body.eventId}/join?token=${token}`,
       pin,
       session: {
         id: data.id,
@@ -78,9 +93,9 @@ Deno.serve(async (req) => {
         timerStartedAt: data.timer_started_at,
         timerElapsedSeconds: data.timer_elapsed_seconds,
       },
-    });
+    }, 200, req);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unexpected error";
-    return jsonResponse({ error: message }, 400);
+    return jsonResponse({ error: message }, 400, req);
   }
 });

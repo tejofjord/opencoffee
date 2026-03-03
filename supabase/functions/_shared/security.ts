@@ -7,7 +7,9 @@ export async function sha256(input: string): Promise<string> {
 }
 
 export function randomPin(): string {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  const buf = new Uint32Array(1);
+  crypto.getRandomValues(buf);
+  return String(100000 + (buf[0] % 900000));
 }
 
 export function sanitizeUrl(raw?: string | null): string | null {

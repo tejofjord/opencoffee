@@ -12,7 +12,7 @@ export function AuthPage() {
 
   const redirect = useMemo(() => {
     const params = new URLSearchParams(location.search);
-    return params.get("redirect") || "/";
+    return params.get("redirect") || "/app";
   }, [location.search]);
 
   if (!loading && user) {
